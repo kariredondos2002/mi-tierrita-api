@@ -1,3 +1,3 @@
-export * from "./signin.js";
-export * from "./signout.js";
-export * from "./me.js";
+export * from "./signin";
+export * from "./signout";
+export * from "./me";
