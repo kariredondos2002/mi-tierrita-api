@@ -16,7 +16,10 @@
     "db:migrate": "tsx src/scripts/migrate.ts apply",
     "db:migrate:prod": "node build/scripts/migrate.js apply",
     "db:status": "tsx src/scripts/migrate.ts status",
-    "create-admin": "tsx src/scripts/create-admin.ts"
+    "create-admin": "tsx src/scripts/create-admin.ts",
+    "db:seed": "tsx src/scripts/seed-demo.ts",
+    "db:seed:prod": "node build/scripts/seed-demo.js",
+    "start:seenode": "node build/scripts/migrate.js apply && node build/scripts/seed-demo.js && node build/server/index.js"
   },
   "dependencies": {
     "bcryptjs": "^3.0.2",

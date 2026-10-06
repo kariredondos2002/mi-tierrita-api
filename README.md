@@ -41,6 +41,8 @@ Comandos:
 | `pnpm test` | Pruebas unitarias (no necesitan base de datos) |
 | `pnpm db:migrate` / `pnpm db:status` | Aplica o lista migraciones |
 | `pnpm create-admin <usuario> <clave>` | Crea el primer ADMIN (no hay registro público) |
+| `pnpm db:seed` | Siembra 120 días de datos simulados de Mi Tierrita (usuarios `admin`, `secretaria`, `bodega` · clave `MiTierrita2026`) |
+| `pnpm start:seenode` | Producción en Seenode: migra, siembra si `SEED_DEMO=true` y arranca |
 | `docker compose up --build` | API + base de datos en contenedores |
 
 ## Variables de entorno
@@ -184,9 +186,18 @@ Los 44 endpoints del documento 06 están implementados y documentados en `/docs`
 - Si una venta puede consumir lotes ya vencidos. Hoy el FEFO los salta y quedan visibles en
   `GET /batches/expiring` y en el reporte de inventario para darles de baja.
 
+## Datos de demostración
+
+`pnpm db:seed` usa la misma lógica de negocio que la API (lotes, FEFO, crédito, abonos y motor financiero), así que
+stock, cartera e indicadores quedan consistentes: 6 líneas y 25 productos agropecuarios, 5 proveedores, 12 clientes
+con cupo, unas 650 ventas en 120 días (≈ $ 65 M al mes, como el caso base), lotes vencidos y por vencer, dos clientes
+con cartera vencida, tres productos con existencias bajas y los escenarios A a D de la ampliación. Son datos
+simulados: no corresponden a la contabilidad real del negocio. Solo siembra si la base no tiene productos.
+
 ## Producción
 
-El backend se empaqueta como imagen de contenedor ([Dockerfile](Dockerfile)); CI
+Despliegue en **Seenode** (base PostgreSQL gestionada + web service + sitio estático): ver
+[docs/DESPLIEGUE.md](docs/DESPLIEGUE.md). También se empaqueta como imagen de contenedor ([Dockerfile](Dockerfile)); CI
 ([.github/workflows/ci.yml](.github/workflows/ci.yml)) hace typecheck, pruebas, migraciones contra un
 PostgreSQL efímero, build y construye la imagen. En producción la API corre detrás de un proxy HTTPS
 y la base es un servicio gestionado aparte con respaldos automáticos; la API no guarda estado entre
