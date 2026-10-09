@@ -1,9 +1,12 @@
-export type AuditRow = { id: number; userId: number; username: string; method: string; resource: string; createdAt: Date };
+export type AuditRow = { id: number; userId: number; username: string; method: string; resource: string; detail: string | null; createdAt: Date };
 
 export type AuditResponse = Omit<AuditRow, "createdAt"> & { createdAt: string };
 
 export const toAuditResponse = (row: AuditRow): AuditResponse => ({ ...row, createdAt: row.createdAt.toISOString() });
 
-export type NewAudit = { userId: number; method: string; resource: string };
+export type NewAudit = { userId: number; method: string; resource: string; detail?: string | null };
 
-export type AuditListFilter = { userId?: number | undefined; resource?: string | undefined; from?: string | undefined; to?: string | undefined };
+/** Métodos que no son escrituras HTTP: generación de reportes y accesos. */
+export const AuditMethods = { EXPORT: "EXPORT", SIGNIN: "SIGNIN" } as const;
+
+export type AuditListFilter = { userId?: number | undefined; resource?: string | undefined; method?: string | undefined; from?: string | undefined; to?: string | undefined };

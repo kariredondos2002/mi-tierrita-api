@@ -23,6 +23,8 @@ No inventar endpoints ni tablas que no estén ahí sin dejarlo escrito en el REA
 3. **Errores solo por código**: `throw domainError(ErrorCodes.X)`; nuevos códigos se agregan a
    `common/errors.ts` y a la tabla del README. Nunca `res.status(...).json({ message: "texto libre" })`.
 4. **Auditoría intocable**: la registra el middleware; nunca duplicarla en rutas ni loguear contraseñas.
+   Únicas excepciones (v4.2), porque son lecturas: la descarga de un reporte (`AuditMethods.EXPORT`, en
+   `controllers/exports`) y el inicio de sesión (`AuditMethods.SIGNIN`), ambos con `detail` legible.
 5. **Esquema solo por migraciones** numeradas en `migrations/` con encabezado "qué cambia / por qué".
    Una migración aplicada no se edita.
 6. **Dinero de negocio en `DECIMAL(12,2)`**; el módulo financiero usa `DOUBLE PRECISION`. Los totales
@@ -45,3 +47,9 @@ No inventar endpoints ni tablas que no estén ahí sin dejarlo escrito en el REA
 13. Toda escritura exitosa de un recurso de `LIVE_RESOURCES` emite `datos:cambio` (middleware `server/live-events.ts`).
 14. El contrato de eventos está en el README («Eventos Socket.io»): cambiar un nombre o una carga útil exige
     actualizar la aplicación (`src/realtime/`) y el README en el mismo commit.
+
+## Reportes (v4.2)
+
+15. Los PDF y Excel se arman en `business-logic/exports/` con `pdf-theme.ts` (colores «Campo abierto», encabezado
+    con «Generado por», gráficos vectoriales, tabla y pie «Página n de N»). Un reporte nuevo reutiliza esos
+    helpers y su controlador pasa por `send()` para quedar auditado; nunca generar el PDF en el navegador.

@@ -10,6 +10,7 @@ import {
   getScenarioTornadoController,
   listScenariosController,
 } from "../controllers/financial/index";
+import { exportScenarioController } from "../controllers/exports/index";
 
 export const financialRouter = Router();
 financialRouter.use(authorize(Roles.ADMIN));
@@ -21,3 +22,4 @@ financialRouter.get("/scenarios/:id/amortization", getScenarioAmortizationContro
 financialRouter.get("/scenarios/:id/sensitivity", getScenarioSensitivityController);
 financialRouter.get("/scenarios/:id/sensitivity/bivariate", getScenarioBivariateController);
 financialRouter.get("/scenarios/:id/tornado", getScenarioTornadoController);
+financialRouter.get("/scenarios/:id/export", exportScenarioController);

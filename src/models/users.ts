@@ -12,6 +12,10 @@ export type UserRow = {
   tokenVersion: number;
   active: boolean;
   createdAt: Date;
+  email: string | null;
+  phone: string | null;
+  lastSeenAt: Date | null;
+  updatedAt: Date | null;
 };
 
 /** DTO de respuesta: lo que sale por la API. Nunca incluye passwordHash ni tokenVersion. */
@@ -23,6 +27,10 @@ export type UserResponse = {
   role: Role;
   active: boolean;
   createdAt: string;
+  email: string | null;
+  phone: string | null;
+  lastSeenAt: string | null;
+  updatedAt: string | null;
 };
 
 export const toUserResponse = (row: UserRow): UserResponse => ({
@@ -33,6 +41,10 @@ export const toUserResponse = (row: UserRow): UserResponse => ({
   role: row.role,
   active: row.active,
   createdAt: row.createdAt.toISOString(),
+  email: row.email ?? null,
+  phone: row.phone ?? null,
+  lastSeenAt: row.lastSeenAt ? row.lastSeenAt.toISOString() : null,
+  updatedAt: row.updatedAt ? row.updatedAt.toISOString() : null,
 });
 
 const USERNAME_RULE = { min: 3, max: 50, pattern: /^[a-z0-9._-]+$/i, patternMessage: "Solo letras, números, punto, guion y guion bajo" };

@@ -40,15 +40,16 @@ ampliación del local. Lo consume la aplicación web
 10. [Base de Datos](#base-de-datos)
 11. [API REST](#api-rest)
 12. [Eventos Socket.io](#eventos-socketio)
-13. [Códigos de Error](#códigos-de-error)
-14. [Seguridad](#seguridad)
-15. [Pruebas](#pruebas)
-16. [Despliegue en Seenode](#despliegue-en-seenode)
-17. [Solución de Problemas](#solución-de-problemas)
-18. [Decisiones Pendientes con el Negocio](#decisiones-pendientes-con-el-negocio)
-19. [Fases del Desarrollo](#fases-del-desarrollo)
-20. [Autores](#autores)
-21. [Notas Académicas](#notas-académicas)
+13. [Reportes en PDF y Excel](#reportes-en-pdf-y-excel-y-su-auditoría-v42)
+14. [Códigos de Error](#códigos-de-error)
+15. [Seguridad](#seguridad)
+16. [Pruebas](#pruebas)
+17. [Despliegue en Seenode](#despliegue-en-seenode)
+18. [Solución de Problemas](#solución-de-problemas)
+19. [Decisiones Pendientes con el Negocio](#decisiones-pendientes-con-el-negocio)
+20. [Fases del Desarrollo](#fases-del-desarrollo)
+21. [Autores](#autores)
+22. [Notas Académicas](#notas-académicas)
 
 ---
 
@@ -127,13 +128,14 @@ sensibilidad univariada y bivariada y diagrama de tornado.
 | Clientes y cartera | Cupo, saldo, abonos, cartera vencida | RF-04 · CU-12 |
 | Proveedores | Ficha y compras que crean el lote | RF-05 · CU-13 |
 | Evaluación financiera | Escenarios, comparación, amortización, sensibilidad, bivariada y tornado | RF-06 · CU-14 a CU-17 |
-| Auditoría | Toda escritura exitosa con usuario, método, recurso y fecha | RF-09 · CU-18 |
+| Auditoría | Toda escritura exitosa con usuario, método, recurso y fecha; además cada reporte descargado (`EXPORT`) y cada inicio de sesión (`SIGNIN`) con su detalle | RF-09 · CU-18 |
 | Reportes | Ventas por periodo, inventario por vencer y bajo mínimo, cartera | RF-08 · CU-19, CU-20 |
+| Reportes en PDF y Excel (v4.2) | Ventas, inventario, cartera y evaluación financiera en **PDF con gráficos** (barras, torta, tornado, indicadores) o **Excel con hojas formateadas**; el encabezado dice quién lo generó y cuándo, y la descarga queda en la auditoría | `/reports/*/export` |
 | Chat del equipo (v4) | Canal general y privados, historial paginado, «está escribiendo…», doble check de lectura, presencia y última conexión, respaldo REST | Socket.io |
 | Notificaciones (v4) | Venta, anulación, abono, compra o lote, stock bajo (≤ 5), nuevo escenario y nuevo contacto; guardadas y empujadas en vivo | Socket.io |
 | Actualización en vivo (v4) | `datos:cambio` tras cada escritura: las demás pestañas refrescan solo lo que cambió | Socket.io |
 | Búsqueda global (v4) | Productos, clientes, proveedores, ventas y personas según el rol (Ctrl + K) | `GET /search` |
-| Mi perfil (v4) | Nombre y apellido propios | `PUT /users/me` |
+| Mi perfil (v4.2) | Nombre, apellido, correo y teléfono propios; cambio de contraseña; mi actividad de los últimos 30 días | `PUT /users/me` · `GET /users/me/activity` |
 | Contacto público (v4) | Formulario de la página de inicio (5 envíos por hora por IP) y bandeja del administrador | `/contact` |
 | Salud y documentación | `GET /health` y Swagger UI en `/docs` | RNF |
 
@@ -251,6 +253,7 @@ en [FigJam](https://www.figma.com/board/aPQbmmGEGvT4ScW7g9Y7h9), D01–D40.
 | jsonwebtoken · bcryptjs | 9 · 3 | Tokens y contraseñas |
 | helmet · cors · express-rate-limit | 8 · 2 · 8 | Cabeceras seguras, orígenes permitidos, límite de intentos |
 | socket.io | 4.8 | Chat, presencia, notificaciones y actualización en vivo |
+| pdfkit · exceljs | 0.17 · 4 | Reportes en PDF con gráficos vectoriales y libros de Excel (v4.2) |
 | swagger-ui-express | 5 | Documentación interactiva en `/docs` |
 | tsx | 4 | Desarrollo con recarga y scripts |
 | node:test | integrado | Pruebas |
@@ -267,7 +270,7 @@ mi-tierrita-api/
 │   ├── routes/            un archivo por entidad (cableado + roles)
 │   ├── controllers/       un archivo por operación
 │   ├── business-logic/    reglas y SQL por entidad (sales, customers, financial/engine.ts, chat,
-│   │                      notifications, search, contact…)
+│   │                      notifications, search, contact, exports/ = PDF y Excel…)
 │   ├── models/            tipos, parseX y toXResponse (realtime.ts: chat, notificaciones, contacto)
 │   ├── sockets/           index (JWT + salas) · chat-handler · presence · emitter
 │   ├── data-sources/      pool, transacciones, errores de PostgreSQL
@@ -275,9 +278,9 @@ mi-tierrita-api/
 │   └── scripts/           migrate · create-admin · seed-demo
 ├── migrations/            SQL numerado y versionado
 ├── docs/
-│   ├── openapi.yaml       contrato de los 60 endpoints REST
+│   ├── openapi.yaml       contrato de los 66 endpoints REST
 │   └── DESPLIEGUE.md      guía de Seenode paso a paso
-├── tests/                 34 pruebas
+├── tests/                 37 pruebas
 ├── Dockerfile · docker-compose.yml
 └── .env.example
 ```
@@ -431,6 +434,8 @@ Ningún valor sensible va en el código, en la imagen ni en el repositorio.
 | `notifications` (v4) | Avisos por usuario: tipo, texto, enlace y leída |
 | `contact_messages` (v4) | Formulario de la página pública y si ya se atendió |
 | `users.last_seen_at` (v4) | Última conexión, al cerrar el último socket del usuario |
+| `users.email` · `phone` · `updated_at` (v4.2, migración 0003) | Datos de contacto editables en Mi perfil; correo único sin distinguir mayúsculas |
+| `audits.detail` (v4.2, migración 0003) | Qué reporte se generó, con qué filtros y formato, o desde qué IP se inició sesión |
 
 ### Reglas de integridad
 
@@ -505,7 +510,12 @@ Base: `http://localhost:4300/api/v1` · Todo excepto `POST /auth/signin`, `POST 
 | GET | `/reports/sales?from&to&groupBy` | ADMIN, SALES | Ventas por día, semana o mes |
 | GET | `/reports/inventory?days=30` | ADMIN | Inventario por vencer y bajo mínimo |
 | GET | `/reports/receivables?overdueDays=30` | ADMIN | Cartera y cartera vencida |
-| GET | `/audits` | ADMIN | Bitácora |
+| GET | `/reports/sales/export?format=pdf\|xlsx&from&to&groupBy` | ADMIN, SALES | Descargar ventas en PDF o Excel (v4.2) |
+| GET | `/reports/inventory/export?format&days` | ADMIN | Descargar inventario (v4.2) |
+| GET | `/reports/receivables/export?format&overdueDays` | ADMIN | Descargar cartera (v4.2) |
+| GET | `/financial/scenarios/:id/export?format` | ADMIN | Descargar la evaluación del escenario (v4.2) |
+| GET | `/reports/exports` | ADMIN (todos) · SALES (los suyos) | Historial de reportes generados: quién, cuál y cuándo (v4.2) |
+| GET | `/audits?method=EXPORT\|SIGNIN\|POST…` | ADMIN | Bitácora, filtrable por tipo de acción |
 | GET | `/health` · `/docs` | público | Salud y Swagger |
 
 ### Tiempo real, búsqueda, perfil y contacto (v4)
@@ -520,7 +530,8 @@ Base: `http://localhost:4300/api/v1` · Todo excepto `POST /auth/signin`, `POST 
 | GET | `/notifications` | todos | Últimas 30 y total sin leer |
 | POST | `/notifications/read` | todos | Marcar leídas (`{ids}` o todas) |
 | GET | `/search?q=` | todos (filtrado por rol) | Búsqueda global |
-| PUT | `/users/me` | todos | Nombre y apellido propios |
+| PUT | `/users/me` | todos | Nombre, apellido, correo y teléfono propios (409 · 630 si el correo ya existe) |
+| GET | `/users/me/activity` | todos | Mis últimas acciones y conteos de 30 días (v4.2) |
 | POST | `/contact` | **público** · 5/h por IP | Formulario de la página de inicio |
 | GET · POST | `/contact` · `/contact/:id/handled` | ADMIN | Bandeja y marcar atendido |
 
@@ -582,6 +593,26 @@ Quién recibe cada notificación:
 | Compra o lote registrado | Administradores y bodega |
 | Escenario financiero nuevo | Administradores |
 | Mensaje de contacto del sitio | Administradores |
+
+---
+
+## Reportes en PDF y Excel y su auditoría (v4.2)
+
+Cada reporte se descarga como **PDF** (por defecto) o **Excel** con `?format=pdf|xlsx`. Los genera el servidor
+(`business-logic/exports/`) con los mismos datos de la pantalla, así que lo que se ve es lo que se imprime.
+
+| Reporte | PDF | Excel |
+|---|---|---|
+| Ventas | Indicadores, barras por día, torta contado/crédito, 10 productos más vendidos, detalle | Hojas *Resumen*, *Por día* y *Por producto* |
+| Inventario | Indicadores, valor por línea, participación, detalle | Hoja por línea con totales |
+| Cartera | Indicadores, saldo por cliente (vencidos en rojo), detalle | Hoja de clientes con cupo, uso y estado |
+| Escenario financiero | VPN, TIR, cuota, cobertura, veredicto, flujo por año y tornado | Indicadores, flujo y sensibilidad |
+
+**Auditoría de quién genera cada reporte.** El encabezado del PDF y la primera fila del Excel dicen
+*«Generado por Nombre (@usuario) el 9 de octubre de 2026, 5:10 p. m.»*, y cada descarga guarda una fila en
+`audits` con `method = 'EXPORT'`, la ruta y un `detail` legible (*«Reporte de ventas · PDF · 2026-09-10 a
+2026-10-09 · por día»*). `GET /reports/exports` muestra ese historial: el administrador ve el de todos y la
+secretaria solo el suyo. Los inicios de sesión se registran igual con `method = 'SIGNIN'` y la IP.
 
 ---
 
@@ -648,8 +679,9 @@ pnpm test
 | `pagination.test.ts` | 4 | `?page` y `?limit` y la respuesta paginada |
 | `errors.test.ts` | 3 | Traducción de errores de dominio y de PostgreSQL |
 | `token.test.ts` | 2 | Firma y verificación del JWT |
-| `realtime.test.ts` | 10 | Entradas del chat, contacto y perfil; escape de la búsqueda; presencia con varias pestañas; el emisor entrega a la sala correcta con dos clientes Socket.io reales |
-| **Total** | **34** | ✔ 32 pasan · 2 omitidas sin el archivo del modelo |
+| `realtime.test.ts` | 11 | Entradas del chat, contacto y perfil (correo y teléfono); escape de la búsqueda; presencia con varias pestañas; el emisor entrega a la sala correcta con dos clientes Socket.io reales |
+| `exports.test.ts` | 2 | El tema de los PDF produce un documento válido (`%PDF`) con gráficos, tabla de varias páginas y pie; formato de dinero y recorte de etiquetas |
+| **Total** | **37** | ✔ 35 pasan · 2 omitidas sin el archivo del modelo |
 
 La integración continua (`.github/workflows/ci.yml`) hace typecheck, pruebas, migraciones contra un PostgreSQL
 efímero, build e imagen de contenedor.
@@ -710,6 +742,7 @@ frecuentes en [`docs/DESPLIEGUE.md`](docs/DESPLIEGUE.md).
 | v1.1 · Demostración y despliegue | Sembrado de 120 días con la misma lógica de negocio, `start:seenode`, guía de Seenode | Completado |
 | v1.2 · Apoyo a la experiencia 3D | Sin cambios de esquema (retirada en la v4 a pedido de la autora) | Reemplazado |
 | v4 · Tiempo real y página pública | Socket.io (chat, presencia, notificaciones, `datos:cambio`), búsqueda global, perfil propio, contacto público; migración 0002 | Completado · falta publicar en Seenode |
+| v4.2 · Reportes en PDF y perfil completo | PDF con gráficos y Excel para ventas, inventario, cartera y escenarios; auditoría `EXPORT` y `SIGNIN` con detalle; perfil con correo, teléfono y actividad; migración 0003 | Completado · falta publicar en Seenode |
 
 ---
 

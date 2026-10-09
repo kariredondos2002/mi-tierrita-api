@@ -14,6 +14,10 @@ export const listAudits = async (page: PageRequest, filter: AuditListFilter): Pr
     params.push(`%${filter.resource}%`);
     conditions.push(`a.resource ILIKE $${params.length}`);
   }
+  if (filter.method !== undefined) {
+    params.push(filter.method.toUpperCase());
+    conditions.push(`a.method = $${params.length}`);
+  }
   if (filter.from !== undefined) {
     params.push(filter.from);
     conditions.push(`a.created_at >= $${params.length}::date`);
@@ -27,7 +31,7 @@ export const listAudits = async (page: PageRequest, filter: AuditListFilter): Pr
   const [{ rows: countRows }, { rows }] = await Promise.all([
     db.query<{ count: number }>(`SELECT count(*)::int AS count ${from} ${where}`, params),
     db.query<AuditRow>(
-      `SELECT a.id, a.user_id AS "userId", u.username, a.method, a.resource, a.created_at AS "createdAt"
+      `SELECT a.id, a.user_id AS "userId", u.username, a.method, a.resource, a.detail, a.created_at AS "createdAt"
        ${from} ${where} ORDER BY a.created_at DESC, a.id DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
       [...params, page.limit, page.offset],
     ),

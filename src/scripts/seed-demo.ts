@@ -102,18 +102,22 @@ const CUSTOMERS = [
 ];
 
 const USERS = [
-  { firstName: "Administración", lastName: "Mi Tierrita", username: "admin", role: "ADMIN" },
-  { firstName: "Secretaria", lastName: "Ventas", username: "secretaria", role: "SALES" },
-  { firstName: "Auxiliar", lastName: "Bodega", username: "bodega", role: "WAREHOUSE" },
+  { firstName: "Administración", lastName: "Mi Tierrita", username: "admin", role: "ADMIN", email: "admin@mitierrita.co", phone: "300 000 0001" },
+  { firstName: "Secretaria", lastName: "Ventas", username: "secretaria", role: "SALES", email: "ventas@mitierrita.co", phone: "300 000 0002" },
+  { firstName: "Auxiliar", lastName: "Bodega", username: "bodega", role: "WAREHOUSE", email: "bodega@mitierrita.co", phone: "300 000 0003" },
 ];
 
 const ensureUser = async (u: (typeof USERS)[number]): Promise<number> => {
   const { rows } = await db.query<{ id: number }>(`SELECT id FROM users WHERE lower(username) = lower($1)`, [u.username]);
-  if (rows[0]) return rows[0].id;
+  if (rows[0]) {
+    // v4.2: completa correo y teléfono de los usuarios de demostración sin pisar lo que ya editaron
+    await db.query(`UPDATE users SET email = COALESCE(email, $2), phone = COALESCE(phone, $3) WHERE id = $1`, [rows[0].id, u.email, u.phone]);
+    return rows[0].id;
+  }
   const created = await db.query<{ id: number }>(
-    `INSERT INTO users (first_name, last_name, username, password_hash, role_id, created_at)
-     VALUES ($1, $2, $3, $4, (SELECT id FROM roles WHERE name = $5), now() - interval '${DAYS + 10} days') RETURNING id`,
-    [u.firstName, u.lastName, u.username, await hashPassword(DEMO_PASSWORD), u.role],
+    `INSERT INTO users (first_name, last_name, username, password_hash, role_id, email, phone, created_at)
+     VALUES ($1, $2, $3, $4, (SELECT id FROM roles WHERE name = $5), $6, $7, now() - interval '${DAYS + 10} days') RETURNING id`,
+    [u.firstName, u.lastName, u.username, await hashPassword(DEMO_PASSWORD), u.role, u.email, u.phone],
   );
   return created.rows[0]!.id;
 };

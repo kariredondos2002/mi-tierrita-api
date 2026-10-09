@@ -3,3 +3,4 @@ export * from "./list-users";
 export * from "./get-user";
 export * from "./change-own-password";
 export * from "./update-own-profile";
+export * from "./my-activity";

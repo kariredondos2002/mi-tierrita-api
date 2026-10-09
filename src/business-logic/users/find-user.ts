@@ -4,7 +4,8 @@ import type { UserRow } from "../../models/index";
 export const USER_COLUMNS = `
   u.id, u.first_name AS "firstName", u.last_name AS "lastName", u.username,
   u.password_hash AS "passwordHash", r.name AS role, u.token_version AS "tokenVersion",
-  u.active, u.created_at AS "createdAt"`;
+  u.active, u.created_at AS "createdAt", u.email, u.phone,
+  u.last_seen_at AS "lastSeenAt", u.updated_at AS "updatedAt"`;
 
 export const USER_FROM = `FROM users u JOIN roles r ON r.id = u.role_id`;
 

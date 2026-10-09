@@ -110,15 +110,27 @@ export const parseMarkNotifications = (body: unknown): { ids?: number[] | undefi
 
 // --- perfil propio ---
 
-export type UpdateProfileRequest = { firstName: string; lastName: string };
+export type UpdateProfileRequest = { firstName: string; lastName: string; email: string | null; phone: string | null };
 
+const EMAIL_RULE = { max: 160, pattern: /^[^\s@]+@[^\s@]+\.[^\s@]+$/, patternMessage: "Correo inválido" };
+const PHONE_RULE = { max: 40, pattern: /^[0-9+()\s-]{7,40}$/, patternMessage: "Solo números, espacios, +, ( ) y guiones" };
+
+/** Mi perfil (v4.2, como en SoftUnity): nombre, apellido, correo y teléfono; vacío borra el dato opcional. */
 export const parseUpdateProfile = (body: unknown): UpdateProfileRequest => {
   const v = createValidator(body);
   const firstName = v.string("firstName", { min: 1, max: 80 });
   const lastName = v.string("lastName", { min: 1, max: 80 });
+  const rawEmail = (body as { email?: unknown } | null)?.email;
+  const rawPhone = (body as { phone?: unknown } | null)?.phone;
+  const email = typeof rawEmail === "string" && rawEmail.trim() !== "" ? v.string("email", EMAIL_RULE, false) : undefined;
+  const phone = typeof rawPhone === "string" && rawPhone.trim() !== "" ? v.string("phone", PHONE_RULE, false) : undefined;
   v.done();
-  return { firstName: firstName as string, lastName: lastName as string };
+  return { firstName: firstName as string, lastName: lastName as string, email: email ? email.toLowerCase() : null, phone: phone ?? null };
 };
+
+/** Mi actividad: últimas acciones propias y conteos de los últimos 30 días. */
+export type ActivityItem = { id: number; method: string; resource: string; detail: string | null; createdAt: string };
+export type MyActivity = { items: ActivityItem[]; last30Days: { writes: number; exports: number; signins: number; sales: number; payments: number; batches: number }; lastSigninAt: string | null };
 
 // --- búsqueda global ---
 

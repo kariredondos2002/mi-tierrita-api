@@ -55,8 +55,17 @@ test("parseContact valida correo y mensaje mínimo; el teléfono es opcional", (
 });
 
 test("parseUpdateProfile exige nombre y apellido", () => {
-  assert.deepEqual(parseUpdateProfile({ firstName: " Karina ", lastName: "Redondo" }), { firstName: "Karina", lastName: "Redondo" });
+  assert.deepEqual(parseUpdateProfile({ firstName: " Karina ", lastName: "Redondo" }), { firstName: "Karina", lastName: "Redondo", email: null, phone: null });
   assert.throws(() => parseUpdateProfile({ firstName: "" }), is400);
+});
+
+test("parseUpdateProfile valida correo y teléfono; vacío los borra", () => {
+  const ok = parseUpdateProfile({ firstName: "Ana", lastName: "Paz", email: " Ana@MiTierrita.CO ", phone: "+57 300 000-0001" });
+  assert.equal(ok.email, "ana@mitierrita.co");
+  assert.equal(ok.phone, "+57 300 000-0001");
+  assert.deepEqual(parseUpdateProfile({ firstName: "Ana", lastName: "Paz", email: "", phone: "  " }), { firstName: "Ana", lastName: "Paz", email: null, phone: null });
+  assert.throws(() => parseUpdateProfile({ firstName: "Ana", lastName: "Paz", email: "ana@" }), is400);
+  assert.throws(() => parseUpdateProfile({ firstName: "Ana", lastName: "Paz", phone: "llámame" }), is400);
 });
 
 test("likePattern escapa los comodines de LIKE", () => {

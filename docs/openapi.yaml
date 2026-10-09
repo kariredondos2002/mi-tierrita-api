@@ -126,15 +126,38 @@ paths:
   /users/me:
     put:
       tags: [Usuarios]
-      summary: Actualizar nombre y apellido propios (Mi perfil)
+      summary: Editar mi perfil — nombre, apellido, correo y teléfono (v4.2; vacío borra el dato opcional)
       requestBody:
         required: true
         content:
           application/json:
-            schema: { type: object, required: [firstName, lastName], properties: { firstName: { type: string, maxLength: 80 }, lastName: { type: string, maxLength: 80 } } }
+            schema:
+              type: object
+              required: [firstName, lastName]
+              properties:
+                firstName: { type: string, maxLength: 80 }
+                lastName: { type: string, maxLength: 80 }
+                email: { type: [string, "null"], maxLength: 160, format: email }
+                phone: { type: [string, "null"], maxLength: 40, pattern: "^[0-9+()\\s-]{7,40}$" }
       responses:
         "200": { description: Usuario actualizado, content: { application/json: { schema: { $ref: "#/components/schemas/User" } } } }
         "400": { $ref: "#/components/responses/Validation" }
+        "409": { description: "630 el correo ya lo usa otra persona", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorBody" } } } }
+  /users/me/activity:
+    get:
+      tags: [Usuarios]
+      summary: Mi actividad (v4.2) — últimas 30 acciones propias y conteos de los últimos 30 días — autenticado
+      responses:
+        "200":
+          description: Actividad propia tomada de la auditoría
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  lastSigninAt: { type: [string, "null"], format: date-time }
+                  last30Days: { type: object, properties: { writes: { type: integer }, exports: { type: integer }, signins: { type: integer }, sales: { type: integer }, payments: { type: integer }, batches: { type: integer } } }
+                  items: { type: array, items: { type: object, properties: { id: { type: integer }, method: { type: string }, resource: { type: string }, detail: { type: [string, "null"] }, createdAt: { type: string, format: date-time } } } }
 
   # ------------------------------------------------------------ Categorías
   /categories:
@@ -439,6 +462,14 @@ paths:
       responses:
         "200": { description: Escenario, content: { application/json: { schema: { $ref: "#/components/schemas/ScenarioDetail" } } } }
         "404": { description: "607", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorBody" } } } }
+  /financial/scenarios/{id}/export:
+    get:
+      tags: [Financiero]
+      summary: Descargar la evaluación del escenario (VPN, TIR, flujo, tornado) en PDF o Excel (v4.2) — ADMIN
+      parameters: [{ $ref: "#/components/parameters/id" }, { $ref: "#/components/parameters/exportFormat" }]
+      responses:
+        "200": { $ref: "#/components/responses/ExportFile" }
+        "404": { description: "Escenario no existe", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorBody" } } } }
   /financial/scenarios/{id}/amortization:
     get:
       tags: [Finanzas]
@@ -541,8 +572,9 @@ paths:
   /audits:
     get:
       tags: [Auditoría]
-      summary: Historial de escrituras (CU-18) — ADMIN
+      summary: Historial de escrituras, reportes generados (EXPORT) e inicios de sesión (SIGNIN) (CU-18) — ADMIN
       parameters:
+        - { name: method, in: query, schema: { type: string, enum: [POST, PUT, PATCH, DELETE, EXPORT, SIGNIN] }, description: "v4.2: filtra por tipo de acción" }
         - { $ref: "#/components/parameters/page" }
         - { $ref: "#/components/parameters/limit" }
         - { name: userId, in: query, schema: { type: integer } }
@@ -553,6 +585,38 @@ paths:
         "200": { description: Listado paginado (más recientes primero), content: { application/json: { schema: { $ref: "#/components/schemas/AuditPage" } } } }
 
   # ------------------------------------------------------------ Reportes
+  /reports/exports:
+    get:
+      tags: [Reportes]
+      summary: Historial de reportes generados (v4.2) — ADMIN ve todos; SALES solo los suyos
+      parameters: [{ $ref: "#/components/parameters/page" }, { $ref: "#/components/parameters/limit" }]
+      responses:
+        "200": { description: "Entradas de auditoría con method = EXPORT: quién, qué reporte, filtros y cuándo", content: { application/json: { schema: { $ref: "#/components/schemas/AuditPage" } } } }
+  /reports/sales/export:
+    get:
+      tags: [Reportes]
+      summary: Descargar el reporte de ventas en PDF (con gráficos) o Excel (v4.2) — ADMIN, SALES
+      parameters:
+        - { $ref: "#/components/parameters/exportFormat" }
+        - { $ref: "#/components/parameters/from" }
+        - { $ref: "#/components/parameters/to" }
+        - { name: groupBy, in: query, schema: { type: string, enum: [day, product], default: day } }
+      responses:
+        "200": { $ref: "#/components/responses/ExportFile" }
+  /reports/inventory/export:
+    get:
+      tags: [Reportes]
+      summary: Descargar el inventario valorizado en PDF o Excel (v4.2) — ADMIN
+      parameters: [{ $ref: "#/components/parameters/exportFormat" }, { name: days, in: query, schema: { type: integer, default: 30 } }]
+      responses:
+        "200": { $ref: "#/components/responses/ExportFile" }
+  /reports/receivables/export:
+    get:
+      tags: [Reportes]
+      summary: Descargar la cartera en PDF o Excel (v4.2) — ADMIN
+      parameters: [{ $ref: "#/components/parameters/exportFormat" }, { $ref: "#/components/parameters/overdueDays" }]
+      responses:
+        "200": { $ref: "#/components/responses/ExportFile" }
   /reports/sales:
     get:
       tags: [Reportes]
@@ -761,10 +825,16 @@ components:
     active: { name: active, in: query, schema: { type: boolean } }
     from: { name: from, in: query, schema: { type: string, format: date }, description: Fecha inicial inclusive (YYYY-MM-DD) }
     to: { name: to, in: query, schema: { type: string, format: date }, description: Fecha final inclusive (YYYY-MM-DD) }
+    exportFormat: { name: format, in: query, schema: { type: string, enum: [pdf, xlsx], default: pdf }, description: "v4.2: PDF con gráficos o libro de Excel con hojas formateadas" }
     overdueDays: { name: overdueDays, in: query, schema: { type: integer, default: 30 }, description: "Cartera vencida: saldo > 0 y última venta a crédito con más de estos días" }
     before: { name: before, in: query, schema: { type: string, format: date-time }, description: Cursor del historial; trae mensajes anteriores a esta fecha }
     chatLimit: { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 40 } }
   responses:
+    ExportFile:
+      description: "Archivo para descargar; el nombre va en Content-Disposition. Cada descarga queda en la auditoría (EXPORT) con usuario, hora y filtros."
+      content:
+        application/pdf: { schema: { type: string, format: binary } }
+        application/vnd.openxmlformats-officedocument.spreadsheetml.sheet: { schema: { type: string, format: binary } }
     Validation:
       description: Datos de entrada mal formados (código 400)
       content:
@@ -841,6 +911,10 @@ components:
         username: { type: string }
         role: { $ref: "#/components/schemas/Role" }
         active: { type: boolean }
+        email: { type: [string, "null"] }
+        phone: { type: [string, "null"] }
+        lastSeenAt: { type: [string, "null"], format: date-time }
+        updatedAt: { type: [string, "null"], format: date-time }
         createdAt: { type: string, format: date-time }
     UserPage: { allOf: [{ $ref: "#/components/schemas/Page" }, { type: object, properties: { items: { type: array, items: { $ref: "#/components/schemas/User" } } } }] }
     CreateUser:
@@ -1037,8 +1111,9 @@ components:
         id: { type: integer }
         userId: { type: integer }
         username: { type: string }
-        method: { type: string }
+        method: { type: string, description: "POST/PUT/PATCH/DELETE; EXPORT = reporte generado; SIGNIN = inicio de sesión" }
         resource: { type: string }
+        detail: { type: [string, "null"], description: "v4.2: qué reporte, con qué filtros y formato, o desde qué IP" }
         createdAt: { type: string, format: date-time }
     AuditPage: { allOf: [{ $ref: "#/components/schemas/Page" }, { type: object, properties: { items: { type: array, items: { $ref: "#/components/schemas/Audit" } } } }] }
     SensitivityVariable: { type: string, enum: [salesIncrease, inventoryTurnover, tmar] }
