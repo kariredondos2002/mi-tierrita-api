@@ -180,6 +180,8 @@ const main = async () => {
     return;
   }
   await seedTeamChat();
+  // v4.2: correo y teléfono de los usuarios de demostración, también en bases ya sembradas (no pisa lo editado)
+  for (const u of USERS) await db.query(`UPDATE users SET email = COALESCE(email, $2), phone = COALESCE(phone, $3) WHERE lower(username) = lower($1)`, [u.username, u.email, u.phone]);
   const { rows: existing } = await db.query<{ n: number }>(`SELECT count(*)::int AS n FROM products`);
   if ((existing[0]?.n ?? 0) > 0 && !force) {
     console.log("La base ya tiene productos; no se siembra nada (usa --force para sembrar de todos modos).");
