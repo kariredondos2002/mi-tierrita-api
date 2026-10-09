@@ -118,6 +118,56 @@ const ensureUser = async (u: (typeof USERS)[number]): Promise<number> => {
   return created.rows[0]!.id;
 };
 
+
+/**
+ * Conversaciones, avisos y contactos de ejemplo (v4) para que el chat y la campana no
+ * aparezcan vacíos en la demostración. Solo se siembran si la tabla de mensajes está vacía,
+ * así que también corre sobre una base que ya tenía el catálogo.
+ */
+const seedTeamChat = async () => {
+  const { rows } = await db.query<{ n: number }>(`SELECT count(*)::int AS n FROM messages`);
+  if ((rows[0]?.n ?? 0) > 0) return;
+  const ids = await Promise.all(USERS.map((u) => ensureUser(u)));
+  const [admin, sales, store] = ids as [number, number, number];
+  console.log("Chat del equipo y notificaciones…");
+  await db.query(`UPDATE users SET last_seen_at = now() - interval '35 minutes' WHERE id = $1 AND last_seen_at IS NULL`, [store]);
+  await db.query(`UPDATE users SET last_seen_at = now() - interval '2 hours' WHERE id = $1 AND last_seen_at IS NULL`, [sales]);
+  const say = (from: number, to: number | null, content: string, minutesAgo: number, read = true) =>
+    db.query(
+      `INSERT INTO messages (sender_id, recipient_id, content, created_at, read_at)
+       VALUES ($1, $2::bigint, $3, now() - ($4::text || ' minutes')::interval,
+               CASE WHEN $5::boolean AND $2::bigint IS NOT NULL THEN now() - ($4::text || ' minutes')::interval + interval '3 minutes' END)`,
+      [from, to, content, minutesAgo, read],
+    );
+  await say(admin, null, "Buenos días. Hoy llega el camión de concentrados; bodega, por favor dejen espacio en la estiba 3.", 300);
+  await say(store, null, "Listo, ya despejamos la estiba 3. Los bultos de sal mineralizada pasan al fondo.", 290);
+  await say(sales, null, "En caja hay tres clientes preguntando por la vacuna de aftosa. ¿Cuándo entra?", 180);
+  await say(admin, null, "Debe entrar el jueves. Anoten nombre y teléfono y les avisamos.", 175);
+  await say(store, null, "Atención: el lote de pollitas ponedoras está casi agotado; quedan pocas unidades.", 60);
+  await say(admin, sales, "¿Cómo va la cartera de Finca Las Palmas? Ya pasaron 30 días.", 140);
+  await say(sales, admin, "Hoy abonaron una parte. Les recordé el saldo y quedaron de pagar el resto la otra semana.", 132);
+  await say(admin, sales, "Perfecto, gracias. Déjalo anotado en el cliente.", 130);
+  await say(store, admin, "Llegaron 40 bultos de concentrado de engorde; ya quedaron registrados con su vencimiento.", 45, false);
+  await say(store, admin, "Ojo: dos sacos venían rotos, los separé para devolución.", 44, false);
+  await say(sales, store, "¿Me confirmas si queda semilla de maíz híbrido? Un cliente quiere 5 bultos.", 25, false);
+
+  const notify = (user: number, kind: string, message: string, link: string, minutesAgo: number, read = false) =>
+    db.query(`INSERT INTO notifications (user_id, kind, message, link, read, created_at) VALUES ($1, $2, $3, $4, $5, now() - ($6::text || ' minutes')::interval)`,
+      [user, kind, message, link, read, minutesAgo]);
+  await notify(admin, "LOW_STOCK", "Pollita ponedora 8 semanas (unidad) quedó con 2 unidades", "/inventario", 58);
+  await notify(admin, "PURCHASE", "Entraron 40 u. de Concentrado de engorde 40 kg", "/lotes", 46);
+  await notify(admin, "PAYMENT", "Abono de $350.000 de Finca Las Palmas", "/clientes", 133, true);
+  await notify(admin, "CONTACT", "Nuevo mensaje de contacto de Rosa Díaz", "/contactos", 20);
+  await notify(store, "LOW_STOCK", "Pollita ponedora 8 semanas (unidad) quedó con 2 unidades", "/inventario", 58);
+  await notify(sales, "SALE_VOIDED", "Se anuló la venta FV-2026-000412 por $46.000", "/ventas", 400, true);
+
+  await db.query(
+    `INSERT INTO contact_messages (name, email, phone, message, created_at) VALUES
+     ('Rosa Díaz', 'rosa.diaz@example.com', '300 555 0101', 'Buenas tardes, ¿tienen concentrado para cerdos al por mayor y hacen domicilio a la vereda Los Arrayanes?', now() - interval '20 minutes'),
+     ('Asociación de Ganaderos de Sahagún', 'contacto@example.org', NULL, 'Queremos cotizar sal mineralizada y vacunas para 60 animales para el ciclo de noviembre.', now() - interval '2 days')`,
+  );
+};
+
 const main = async () => {
   const force = process.argv.includes("--force");
   // En producción la demo solo se siembra si se pide de forma explícita (SEED_DEMO=true)
@@ -125,6 +175,7 @@ const main = async () => {
     console.log("Datos de demostración omitidos (defina SEED_DEMO=true para sembrarlos).");
     return;
   }
+  await seedTeamChat();
   const { rows: existing } = await db.query<{ n: number }>(`SELECT count(*)::int AS n FROM products`);
   if ((existing[0]?.n ?? 0) > 0 && !force) {
     console.log("La base ya tiene productos; no se siembra nada (usa --force para sembrar de todos modos).");

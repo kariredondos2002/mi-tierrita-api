@@ -11,6 +11,10 @@ import { salesRouter } from "./sales";
 import { auditsRouter } from "./audits";
 import { reportsRouter } from "./reports";
 import { financialRouter } from "./financial";
+import { chatRouter } from "./chat";
+import { notificationsRouter } from "./notifications";
+import { searchRouter } from "./search";
+import { contactPublicRouter, contactRouter } from "./contact";
 
 export { healthRouter } from "./health";
 export { docsRouter } from "./docs";
@@ -25,6 +29,7 @@ export const apiRouter = Router();
 
 // --- públicas ---
 apiRouter.use("/auth", authPublicRouter);
+apiRouter.use("/contact", contactPublicRouter); // formulario de la página pública de inicio
 
 // --- a partir de aquí, autenticación obligatoria ---
 apiRouter.use(authenticate);
@@ -40,3 +45,9 @@ apiRouter.use("/sales", salesRouter);
 apiRouter.use("/audits", auditsRouter);
 apiRouter.use("/reports", reportsRouter);
 apiRouter.use("/financial", financialRouter);
+
+// Tiempo real (v4): chat, notificaciones, búsqueda global y bandeja de contacto
+apiRouter.use("/chat", chatRouter);
+apiRouter.use("/notifications", notificationsRouter);
+apiRouter.use("/search", searchRouter);
+apiRouter.use("/contact", contactRouter);

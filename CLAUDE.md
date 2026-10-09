@@ -33,3 +33,15 @@ No inventar endpoints ni tablas que no estén ahí sin dejarlo escrito en el REA
 9. Sin clases en dominio: funciones flecha exportadas. Copiar el módulo `categories` antes que inventar.
    Orden de rutas: las fijas (`/me/password`, `/scenarios/compare`) van antes que las de `/:id`.
 10. Cada módulo nuevo actualiza `docs/openapi.yaml` y la tabla "Estado de la API" del README.
+
+## Tiempo real (v4)
+
+11. **Socket.io vive en `src/sockets/`**: `index.ts` autentica con el mismo JWT y une a las salas `canal:general`,
+    `usuario:<id>` y `rol:<ROL>`; `chat-handler.ts` define los eventos; `presence.ts` lleva quién está en línea.
+    La lógica de negocio **nunca importa Socket.io**: emite con `sockets/emitter.ts` (`emitToAll`, `emitToUsers`,
+    `emitToRoles`), que no hace nada si no hay servidor (pruebas y scripts).
+12. Un evento nuevo de negocio se agrega en `business-logic/notifications/business-events.ts` y se llama desde el
+    controlador **después** de que la operación quedó guardada; una falla al notificar se registra y no tumba la respuesta.
+13. Toda escritura exitosa de un recurso de `LIVE_RESOURCES` emite `datos:cambio` (middleware `server/live-events.ts`).
+14. El contrato de eventos está en el README («Eventos Socket.io»): cambiar un nombre o una carga útil exige
+    actualizar la aplicación (`src/realtime/`) y el README en el mismo commit.

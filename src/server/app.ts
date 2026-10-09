@@ -4,6 +4,7 @@ import helmet from "helmet";
 import { config } from "./config";
 import { errorHandler, notFoundHandler } from "./error-handler";
 import { auditMiddleware } from "./audit";
+import { liveEventsMiddleware } from "./live-events";
 import { apiRouter, docsRouter, healthRouter } from "../routes/index";
 
 /** Arma la aplicación Express con los componentes transversales y las rutas. */
@@ -21,7 +22,7 @@ export const createApp = () => {
   app.use("/docs", docsRouter);
 
   // Toda la API versionada; la auditoría envuelve todas las rutas
-  app.use(config.apiPrefix, auditMiddleware, apiRouter);
+  app.use(config.apiPrefix, auditMiddleware, liveEventsMiddleware, apiRouter);
 
   app.use(notFoundHandler);
   app.use(errorHandler);

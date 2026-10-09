@@ -4,7 +4,12 @@ info:
   version: 1.0.0
   description: |
     Backend REST de Mi Tierrita SIG. Todas las rutas van bajo `/api/v1` y exigen `Authorization: Bearer <token>`
-    salvo `POST /auth/signin`, `GET /health` y `GET /docs`.
+    salvo `POST /auth/signin`, `POST /contact`, `GET /health` y `GET /docs`.
+
+    Tiempo real (v4): el chat, la presencia, las notificaciones y la actualización en vivo viajan por
+    **Socket.io** en `/socket.io` del mismo servidor, autenticado con el mismo JWT (`auth: { token }`).
+    El contrato de eventos está en el README, sección «Eventos Socket.io». Las rutas `/chat` de aquí son el
+    historial paginado y un respaldo REST que produce exactamente los mismos eventos.
 
     Convenciones (documento 06):
     - Los listados aceptan `?page=` (base 1) y `?limit=` (10, máximo 100) y responden `{ count, page, pages, items }`.
@@ -24,6 +29,10 @@ tags:
   - { name: Finanzas }
   - { name: Auditoría }
   - { name: Reportes }
+  - { name: Chat }
+  - { name: Notificaciones }
+  - { name: Búsqueda }
+  - { name: Contacto }
 
 paths:
   # ------------------------------------------------------------ Autenticación
@@ -113,6 +122,19 @@ paths:
       responses:
         "204": { description: Contraseña actualizada }
         "401": { description: "610 contraseña actual incorrecta", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorBody" } } } }
+
+  /users/me:
+    put:
+      tags: [Usuarios]
+      summary: Actualizar nombre y apellido propios (Mi perfil)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [firstName, lastName], properties: { firstName: { type: string, maxLength: 80 }, lastName: { type: string, maxLength: 80 } } }
+      responses:
+        "200": { description: Usuario actualizado, content: { application/json: { schema: { $ref: "#/components/schemas/User" } } } }
+        "400": { $ref: "#/components/responses/Validation" }
 
   # ------------------------------------------------------------ Categorías
   /categories:
@@ -610,6 +632,125 @@ paths:
                     type: array
                     items: { type: object, properties: { customerId: { type: integer }, name: { type: string }, creditLimit: { type: number }, balance: { type: number }, lastCreditSaleAt: { type: [string, "null"] }, lastPaymentAt: { type: [string, "null"] }, overdue: { type: boolean } } }
 
+  # ------------------------------------------------------------ Chat (v4)
+  /chat/general:
+    get:
+      tags: [Chat]
+      summary: Historial del canal general, del más antiguo al más reciente, paginado hacia atrás
+      parameters: [{ $ref: "#/components/parameters/before" }, { $ref: "#/components/parameters/chatLimit" }]
+      responses: { "200": { description: Página de mensajes, content: { application/json: { schema: { $ref: "#/components/schemas/MessagePage" } } } } }
+    post:
+      tags: [Chat]
+      summary: Enviar al canal general (respaldo REST de chat:mensaje)
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/MessageContent" } } } }
+      responses: { "201": { description: Mensaje guardado y difundido, content: { application/json: { schema: { $ref: "#/components/schemas/Message" } } } }, "400": { $ref: "#/components/responses/Validation" } }
+  /chat/conversations:
+    get:
+      tags: [Chat]
+      summary: Conversaciones privadas con el último mensaje y los no leídos
+      responses:
+        "200":
+          description: Conversaciones
+          content: { application/json: { schema: { type: object, properties: { conversations: { type: array, items: { $ref: "#/components/schemas/Conversation" } } } } } }
+  /chat/people:
+    get:
+      tags: [Chat]
+      summary: Directorio del equipo con estado en línea y última conexión
+      responses:
+        "200":
+          description: Personas
+          content: { application/json: { schema: { type: object, properties: { people: { type: array, items: { allOf: [{ $ref: "#/components/schemas/Person" }, { type: object, properties: { online: { type: boolean }, lastSeenAt: { type: [string, "null"], format: date-time } } }] } } } } } }
+  /chat/online:
+    get:
+      tags: [Chat]
+      summary: Personas con al menos una pestaña conectada
+      responses: { "200": { description: Personas en línea, content: { application/json: { schema: { type: object, properties: { people: { type: array, items: { $ref: "#/components/schemas/Person" } } } } } } } }
+  /chat/unread:
+    get:
+      tags: [Chat]
+      summary: Total de mensajes privados sin leer
+      responses: { "200": { description: Contador, content: { application/json: { schema: { type: object, properties: { unread: { type: integer } } } } } } }
+  /chat/private/{userId}:
+    parameters: [{ name: userId, in: path, required: true, schema: { type: integer, minimum: 1 } }]
+    get:
+      tags: [Chat]
+      summary: Historial de la conversación privada con otra persona
+      parameters: [{ $ref: "#/components/parameters/before" }, { $ref: "#/components/parameters/chatLimit" }]
+      responses: { "200": { description: Página de mensajes, content: { application/json: { schema: { $ref: "#/components/schemas/MessagePage" } } } }, "404": { description: 603 usuario no encontrado } }
+    post:
+      tags: [Chat]
+      summary: Enviar mensaje privado (respaldo REST de chat:privado)
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/MessageContent" } } } }
+      responses: { "201": { description: Mensaje guardado y entregado, content: { application/json: { schema: { $ref: "#/components/schemas/Message" } } } }, "404": { description: 603 destinatario no encontrado o inactivo } }
+  /chat/private/{userId}/read:
+    parameters: [{ name: userId, in: path, required: true, schema: { type: integer, minimum: 1 } }]
+    post:
+      tags: [Chat]
+      summary: Marcar como leída la conversación (emite chat:leido al emisor)
+      responses: { "200": { description: Mensajes marcados, content: { application/json: { schema: { type: object, properties: { updated: { type: integer } } } } } } }
+
+  # ------------------------------------------------------------ Notificaciones (v4)
+  /notifications:
+    get:
+      tags: [Notificaciones]
+      summary: Últimas 30 notificaciones y total sin leer
+      responses:
+        "200":
+          description: Notificaciones
+          content: { application/json: { schema: { type: object, properties: { unread: { type: integer }, notifications: { type: array, items: { $ref: "#/components/schemas/Notification" } } } } } }
+  /notifications/read:
+    post:
+      tags: [Notificaciones]
+      summary: Marcar como leídas (sin ids marca todas)
+      requestBody: { content: { application/json: { schema: { type: object, properties: { ids: { type: array, items: { type: integer } } } } } } }
+      responses: { "200": { description: Marcadas, content: { application/json: { schema: { type: object, properties: { updated: { type: integer } } } } } } }
+
+  # ------------------------------------------------------------ Búsqueda (v4)
+  /search:
+    get:
+      tags: [Búsqueda]
+      summary: Búsqueda global (Ctrl + K), limitada por rol; mínimo 2 caracteres
+      parameters: [{ name: q, in: query, required: true, schema: { type: string, minLength: 2, maxLength: 80 } }]
+      responses:
+        "200":
+          description: Resultados agrupados (máximo 5 por grupo)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  products: { type: array, items: { type: object, properties: { id: { type: integer }, name: { type: string }, sku: { type: string }, stock: { type: integer } } } }
+                  customers: { type: array, items: { type: object, properties: { id: { type: integer }, name: { type: string }, document: { type: string }, balance: { type: number } } } }
+                  suppliers: { type: array, items: { type: object, properties: { id: { type: integer }, name: { type: string } } } }
+                  sales: { type: array, items: { type: object, properties: { id: { type: integer }, invoiceNumber: { type: string }, customerName: { type: [string, "null"] }, total: { type: number }, createdAt: { type: string, format: date-time } } } }
+                  people: { type: array, items: { $ref: "#/components/schemas/Person" } }
+
+  # ------------------------------------------------------------ Contacto (v4)
+  /contact:
+    post:
+      tags: [Contacto]
+      summary: Formulario de la página pública de inicio — público, 5 envíos por hora por IP
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [name, email, message], properties: { name: { type: string, maxLength: 120 }, email: { type: string, format: email }, phone: { type: string, maxLength: 40 }, message: { type: string, minLength: 10, maxLength: 2000 } } }
+      responses:
+        "201": { description: Recibido; se notifica a los administradores }
+        "400": { $ref: "#/components/responses/Validation" }
+        "429": { description: 640 demasiados envíos }
+    get:
+      tags: [Contacto]
+      summary: Bandeja de mensajes de contacto — ADMIN
+      responses: { "200": { description: Mensajes, content: { application/json: { schema: { type: object, properties: { items: { type: array, items: { $ref: "#/components/schemas/ContactMessage" } } } } } } }, "403": { $ref: "#/components/responses/Forbidden" } }
+  /contact/{id}/handled:
+    post:
+      tags: [Contacto]
+      summary: Marcar un contacto como atendido — ADMIN
+      parameters: [{ $ref: "#/components/parameters/id" }]
+      responses: { "204": { description: Atendido } }
+
 components:
   securitySchemes:
     bearerAuth: { type: http, scheme: bearer, bearerFormat: JWT }
@@ -621,6 +762,8 @@ components:
     from: { name: from, in: query, schema: { type: string, format: date }, description: Fecha inicial inclusive (YYYY-MM-DD) }
     to: { name: to, in: query, schema: { type: string, format: date }, description: Fecha final inclusive (YYYY-MM-DD) }
     overdueDays: { name: overdueDays, in: query, schema: { type: integer, default: 30 }, description: "Cartera vencida: saldo > 0 y última venta a crédito con más de estos días" }
+    before: { name: before, in: query, schema: { type: string, format: date-time }, description: Cursor del historial; trae mensajes anteriores a esta fecha }
+    chatLimit: { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 40 } }
   responses:
     Validation:
       description: Datos de entrada mal formados (código 400)
@@ -637,6 +780,43 @@ components:
       description: "613 rol insuficiente (details.requiredRoles)"
       content: { application/json: { schema: { $ref: "#/components/schemas/ErrorBody" } } }
   schemas:
+    Person:
+      type: object
+      properties: { id: { type: integer }, name: { type: string }, username: { type: string }, role: { type: string, enum: [ADMIN, SALES, WAREHOUSE] } }
+    MessageContent:
+      type: object
+      required: [content]
+      properties: { content: { type: string, minLength: 1, maxLength: 2000 } }
+    Message:
+      type: object
+      properties:
+        id: { type: integer }
+        sender: { $ref: "#/components/schemas/Person" }
+        recipientId: { type: [integer, "null"], description: null en el canal general }
+        content: { type: string }
+        readAt: { type: [string, "null"], format: date-time }
+        createdAt: { type: string, format: date-time }
+    MessagePage:
+      type: object
+      properties: { messages: { type: array, items: { $ref: "#/components/schemas/Message" } }, hasMore: { type: boolean } }
+    Conversation:
+      type: object
+      properties:
+        person: { $ref: "#/components/schemas/Person" }
+        lastMessage: { type: object, properties: { id: { type: integer }, content: { type: string }, senderId: { type: integer }, createdAt: { type: string, format: date-time } } }
+        unread: { type: integer }
+    Notification:
+      type: object
+      properties:
+        id: { type: integer }
+        kind: { type: string, enum: [SALE, SALE_VOIDED, PAYMENT, PURCHASE, LOW_STOCK, SCENARIO, CONTACT, MESSAGE] }
+        message: { type: string }
+        link: { type: [string, "null"] }
+        read: { type: boolean }
+        createdAt: { type: string, format: date-time }
+    ContactMessage:
+      type: object
+      properties: { id: { type: integer }, name: { type: string }, email: { type: string }, phone: { type: string }, message: { type: string }, handled: { type: boolean }, createdAt: { type: string, format: date-time } }
     ErrorBody:
       type: object
       required: [message]

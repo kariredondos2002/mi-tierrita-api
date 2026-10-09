@@ -39,15 +39,16 @@ ampliación del local. Lo consume la aplicación web
 9. [Variables de Entorno](#variables-de-entorno)
 10. [Base de Datos](#base-de-datos)
 11. [API REST](#api-rest)
-12. [Códigos de Error](#códigos-de-error)
-13. [Seguridad](#seguridad)
-14. [Pruebas](#pruebas)
-15. [Despliegue en Seenode](#despliegue-en-seenode)
-16. [Solución de Problemas](#solución-de-problemas)
-17. [Decisiones Pendientes con el Negocio](#decisiones-pendientes-con-el-negocio)
-18. [Fases del Desarrollo](#fases-del-desarrollo)
-19. [Autores](#autores)
-20. [Notas Académicas](#notas-académicas)
+12. [Eventos Socket.io](#eventos-socketio)
+13. [Códigos de Error](#códigos-de-error)
+14. [Seguridad](#seguridad)
+15. [Pruebas](#pruebas)
+16. [Despliegue en Seenode](#despliegue-en-seenode)
+17. [Solución de Problemas](#solución-de-problemas)
+18. [Decisiones Pendientes con el Negocio](#decisiones-pendientes-con-el-negocio)
+19. [Fases del Desarrollo](#fases-del-desarrollo)
+20. [Autores](#autores)
+21. [Notas Académicas](#notas-académicas)
 
 ---
 
@@ -57,6 +58,12 @@ El negocio facturaba con un software que solo emite la factura electrónica: no 
 cartera estaba en un cuaderno y la gerencia evaluaba un crédito para ampliar el local sin cifras. Esta API es el
 núcleo del SIG: guarda la operación diaria con sus reglas (FEFO, cupo de crédito, anulaciones, auditoría), la agrega
 en reportes y calcula los indicadores de la inversión (VPN, TIR, cobertura de la cuota, sensibilidad).
+
+Desde la versión 4 la API también es un servidor **Socket.io**: el equipo (administración, caja y bodega) conversa
+en un canal general y en privados con historial, «está escribiendo…», confirmación de lectura y presencia; los
+eventos del negocio (ventas, abonos, compras, stock bajo, escenarios, contactos) llegan como notificaciones en vivo,
+y cualquier cambio refresca las pantallas abiertas de los demás sin recargar. La página pública de inicio guarda los
+mensajes de su formulario de contacto.
 
 Implementa la documentación técnica del TCC: arquitectura del backend (01), requisitos (03), casos de uso (04),
 modelo de datos (05), diseño de la API (06) e infraestructura del backend (08).
@@ -92,6 +99,14 @@ si algo falla, nada queda a medias. Los contadores que comparten varias cajas (`
 En productos con vencimiento el orden de entrada no sirve: una venta descuenta del lote que **vence primero**,
 salta los vencidos y puede repartir la cantidad entre varios lotes; la asignación queda guardada para poder anularla.
 
+### Tiempo real con WebSocket (Socket.io)
+
+HTTP es petición-respuesta: el servidor no puede avisar por iniciativa propia. Un WebSocket mantiene una conexión
+abierta y bidireccional; **Socket.io** agrega sobre ella reconexión automática, salas (*rooms*), confirmaciones
+(*acks*) y respaldo por *long polling*. El servidor agrupa los sockets en salas (`canal:general`, `usuario:<id>`,
+`rol:<ROL>`) y emite a una sala sin saber qué pestañas la forman. El patrón **emisor desacoplado** (tomado de
+SoftUnity) deja que la lógica de negocio publique eventos sin depender de Express ni de Socket.io.
+
 ### Evaluación financiera
 
 El motor (`business-logic/financial/engine.ts`) es un porte uno a uno del modelo de Ingeniería Económica: flujo de
@@ -114,6 +129,12 @@ sensibilidad univariada y bivariada y diagrama de tornado.
 | Evaluación financiera | Escenarios, comparación, amortización, sensibilidad, bivariada y tornado | RF-06 · CU-14 a CU-17 |
 | Auditoría | Toda escritura exitosa con usuario, método, recurso y fecha | RF-09 · CU-18 |
 | Reportes | Ventas por periodo, inventario por vencer y bajo mínimo, cartera | RF-08 · CU-19, CU-20 |
+| Chat del equipo (v4) | Canal general y privados, historial paginado, «está escribiendo…», doble check de lectura, presencia y última conexión, respaldo REST | Socket.io |
+| Notificaciones (v4) | Venta, anulación, abono, compra o lote, stock bajo (≤ 5), nuevo escenario y nuevo contacto; guardadas y empujadas en vivo | Socket.io |
+| Actualización en vivo (v4) | `datos:cambio` tras cada escritura: las demás pestañas refrescan solo lo que cambió | Socket.io |
+| Búsqueda global (v4) | Productos, clientes, proveedores, ventas y personas según el rol (Ctrl + K) | `GET /search` |
+| Mi perfil (v4) | Nombre y apellido propios | `PUT /users/me` |
+| Contacto público (v4) | Formulario de la página de inicio (5 envíos por hora por IP) y bandeja del administrador | `/contact` |
 | Salud y documentación | `GET /health` y Swagger UI en `/docs` | RNF |
 
 ---
@@ -135,6 +156,8 @@ sensibilidad univariada y bivariada y diagrama de tornado.
 | Reporte de ventas | ✔ | ✔ | — |
 | Reportes de inventario y cartera | ✔ | — | — |
 | Auditoría | ✔ | — | — |
+| Chat, notificaciones, búsqueda y perfil propio | ✔ | ✔ | ✔ |
+| Bandeja de contactos del sitio | ✔ | — | — |
 
 Un rol sin permiso recibe **403** con el código 613 y los roles requeridos.
 
@@ -195,8 +218,24 @@ POST /sales  (token de la Secretaria)
   → 201 con la venta completa
 ```
 
-Diagramas (arquitectura, capas, despliegue, modelo de datos, secuencias, estados) en
-[FigJam](https://www.figma.com/board/aPQbmmGEGvT4ScW7g9Y7h9), D01–D33.
+### Tiempo real: Socket.io sobre el mismo servidor
+
+```
+                 ┌──────────────── servidor HTTP :4300 ────────────────┐
+  pestañas ──────┤  Express  /api/v1 …  (REST + auditoría + datos:cambio)│
+  (JWT)          │  Socket.io /socket.io                                 │
+                 │     io.use(auth JWT) → join canal:general,            │
+                 │                         usuario:<id>, rol:<ROL>       │
+                 │     chat-handler: chat:mensaje · chat:privado ·       │
+                 │                   chat:leido · chat:escribiendo        │
+                 │     presence: Map usuario → Set<socketId>             │
+                 └──────────────┬────────────────────────────────────────┘
+                                │ emitter.ts (emitToAll / emitToUsers / emitToRoles)
+            business-logic: chat/deliver · notifications/business-events
+```
+
+Diagramas (arquitectura, capas, despliegue, modelo de datos, secuencias de chat y reconexión, salas de Socket.io)
+en [FigJam](https://www.figma.com/board/aPQbmmGEGvT4ScW7g9Y7h9), D01–D40.
 
 ---
 
@@ -211,6 +250,7 @@ Diagramas (arquitectura, capas, despliegue, modelo de datos, secuencias, estados
 | PostgreSQL | 16 (18 compatible) | Base de datos |
 | jsonwebtoken · bcryptjs | 9 · 3 | Tokens y contraseñas |
 | helmet · cors · express-rate-limit | 8 · 2 · 8 | Cabeceras seguras, orígenes permitidos, límite de intentos |
+| socket.io | 4.8 | Chat, presencia, notificaciones y actualización en vivo |
 | swagger-ui-express | 5 | Documentación interactiva en `/docs` |
 | tsx | 4 | Desarrollo con recarga y scripts |
 | node:test | integrado | Pruebas |
@@ -226,16 +266,18 @@ mi-tierrita-api/
 │   ├── security/          roles, bcrypt, JWT, authenticate y authorize
 │   ├── routes/            un archivo por entidad (cableado + roles)
 │   ├── controllers/       un archivo por operación
-│   ├── business-logic/    reglas y SQL por entidad (sales, customers, financial/engine.ts…)
-│   ├── models/            tipos, parseX y toXResponse
+│   ├── business-logic/    reglas y SQL por entidad (sales, customers, financial/engine.ts, chat,
+│   │                      notifications, search, contact…)
+│   ├── models/            tipos, parseX y toXResponse (realtime.ts: chat, notificaciones, contacto)
+│   ├── sockets/           index (JWT + salas) · chat-handler · presence · emitter
 │   ├── data-sources/      pool, transacciones, errores de PostgreSQL
 │   ├── common/            códigos de error, paginación, validador, fechas
 │   └── scripts/           migrate · create-admin · seed-demo
 ├── migrations/            SQL numerado y versionado
 ├── docs/
-│   ├── openapi.yaml       contrato de los 44 endpoints
+│   ├── openapi.yaml       contrato de los 60 endpoints REST
 │   └── DESPLIEGUE.md      guía de Seenode paso a paso
-├── tests/                 24 pruebas
+├── tests/                 34 pruebas
 ├── Dockerfile · docker-compose.yml
 └── .env.example
 ```
@@ -385,6 +427,10 @@ Ningún valor sensible va en el código, en la imagen ni en el repositorio.
 | `invoice_counters` | Correlativo de factura por año |
 | `audits` | Bitácora de escrituras |
 | `financial_scenarios` · `financial_scenario_cash_flows` · `financial_scenario_amortization` | Escenarios con supuestos, indicadores, flujo y amortización guardados |
+| `messages` (v4) | Chat: canal general (`recipient_id` nulo) y privados, con `read_at` para el doble check |
+| `notifications` (v4) | Avisos por usuario: tipo, texto, enlace y leída |
+| `contact_messages` (v4) | Formulario de la página pública y si ya se atendió |
+| `users.last_seen_at` (v4) | Última conexión, al cerrar el último socket del usuario |
 
 ### Reglas de integridad
 
@@ -404,7 +450,7 @@ psql -h localhost -p 5433 -U mi_tierrita mi_tierrita -c "SELECT code, name, stoc
 
 ## API REST
 
-Base: `http://localhost:4300/api/v1` · Todo excepto `POST /auth/signin` y `GET /health` exige
+Base: `http://localhost:4300/api/v1` · Todo excepto `POST /auth/signin`, `POST /contact` y `GET /health` exige
 `Authorization: Bearer <token>`. Los listados aceptan `?page=` y `?limit=` (10, máximo 100) y responden
 `{ count, page, pages, items }`. Contrato completo en `docs/openapi.yaml` y en **/docs**.
 
@@ -462,6 +508,22 @@ Base: `http://localhost:4300/api/v1` · Todo excepto `POST /auth/signin` y `GET 
 | GET | `/audits` | ADMIN | Bitácora |
 | GET | `/health` · `/docs` | público | Salud y Swagger |
 
+### Tiempo real, búsqueda, perfil y contacto (v4)
+
+| Método | Ruta | Roles | Descripción |
+|---|---|---|---|
+| GET · POST | `/chat/general?before&limit` | todos | Historial del canal general · enviar (respaldo de `chat:mensaje`) |
+| GET | `/chat/conversations` | todos | Privadas con último mensaje y no leídos |
+| GET | `/chat/people` · `/chat/online` · `/chat/unread` | todos | Directorio con última conexión · en línea · total sin leer |
+| GET · POST | `/chat/private/:userId` | todos | Historial privado · enviar (respaldo de `chat:privado`) |
+| POST | `/chat/private/:userId/read` | todos | Marcar como leída (emite `chat:leido`) |
+| GET | `/notifications` | todos | Últimas 30 y total sin leer |
+| POST | `/notifications/read` | todos | Marcar leídas (`{ids}` o todas) |
+| GET | `/search?q=` | todos (filtrado por rol) | Búsqueda global |
+| PUT | `/users/me` | todos | Nombre y apellido propios |
+| POST | `/contact` | **público** · 5/h por IP | Formulario de la página de inicio |
+| GET · POST | `/contact` · `/contact/:id/handled` | ADMIN | Bandeja y marcar atendido |
+
 ### Ejemplo con curl
 
 ```bash
@@ -478,6 +540,48 @@ curl -s -X POST http://localhost:4300/api/v1/sales -H "Authorization: Bearer $TO
   -H "Content-Type: application/json" \
   -d '{"paymentType":"CREDIT","customerId":3,"lines":[{"productId":7,"quantity":2}]}'
 ```
+
+---
+
+## Eventos Socket.io
+
+Conexión: `io("http://localhost:4300", { auth: { token } })`, el mismo JWT del REST. Un token inválido o de una
+sesión cerrada se rechaza con `connect_error` `611`; un usuario inactivo con `612`. Cada evento del cliente responde
+por *ack* `{ ok: true, … }` o `{ ok: false, error: "<código>" }`. Límite: 12 mensajes cada 10 s por socket (`640`).
+
+**Cliente → servidor**
+
+| Evento | Datos | Ack | Efecto |
+|---|---|---|---|
+| `chat:mensaje` | `"texto"` | `{ ok, message }` | Guarda y emite `chat:mensaje` a `canal:general` |
+| `chat:privado` | `{ recipientId, content }` | `{ ok, message }` | Guarda y emite `chat:privado` a `usuario:<emisor>` y `usuario:<receptor>` |
+| `chat:leido` | `{ userId }` | `{ ok, updated }` | Marca leídos los mensajes de esa persona y emite `chat:leido` |
+| `chat:escribiendo` | `{ recipientId \| null, typing }` | — | Reenvía a la sala general o solo al destinatario |
+
+**Servidor → cliente**
+
+| Evento | Sala | Datos |
+|---|---|---|
+| `chat:historial` | el socket que se conecta | `{ messages, hasMore }` (últimos 40 del canal general) |
+| `chat:mensaje` · `chat:privado` | general · emisor y receptor | `Message` |
+| `chat:leido` | emisor y lector | `{ readerId, otherId, at }` |
+| `chat:escribiendo` | general o destinatario | `{ from, recipientId, typing }` |
+| `usuarios:conectados` | el socket que se conecta | `Person[]` |
+| `usuario:conectado` · `usuario:desconectado` | general | `Person` · `{ id, lastSeenAt }` |
+| `notificacion` | `usuario:<id>` | `Notification` (también queda en la tabla) |
+| `datos:cambio` | general | `{ resource, actorId, at }` — `products`, `batches`, `sales`, `customers`, `suppliers`, `financial`… |
+
+Quién recibe cada notificación:
+
+| Evento de negocio | Destinatarios (sin el autor) |
+|---|---|
+| Venta registrada | Administradores |
+| Producto con 5 unidades o menos después de una venta | Administradores y bodega |
+| Venta anulada | Administradores y secretarias |
+| Abono | Administradores |
+| Compra o lote registrado | Administradores y bodega |
+| Escenario financiero nuevo | Administradores |
+| Mensaje de contacto del sitio | Administradores |
 
 ---
 
@@ -544,7 +648,8 @@ pnpm test
 | `pagination.test.ts` | 4 | `?page` y `?limit` y la respuesta paginada |
 | `errors.test.ts` | 3 | Traducción de errores de dominio y de PostgreSQL |
 | `token.test.ts` | 2 | Firma y verificación del JWT |
-| **Total** | **24** | ✔ 22 pasan · 2 omitidas sin el archivo del modelo |
+| `realtime.test.ts` | 10 | Entradas del chat, contacto y perfil; escape de la búsqueda; presencia con varias pestañas; el emisor entrega a la sala correcta con dos clientes Socket.io reales |
+| **Total** | **34** | ✔ 32 pasan · 2 omitidas sin el archivo del modelo |
 
 La integración continua (`.github/workflows/ci.yml`) hace typecheck, pruebas, migraciones contra un PostgreSQL
 efímero, build e imagen de contenedor.
@@ -579,6 +684,9 @@ frecuentes en [`docs/DESPLIEGUE.md`](docs/DESPLIEGUE.md).
 | Las cuentas de demostración no entran | Falta sembrar: `pnpm db:seed` (solo siembra si la base está vacía) |
 | 429 al iniciar sesión | Límite de intentos: espere 15 minutos o reinicie la API |
 | Error de CORS desde la aplicación | Agregue el origen a `CORS_ORIGINS` y reinicie |
+| El chat dice «Reconectando…» | La API se reinició o se cayó la red; Socket.io reintenta solo y, al volver, la aplicación recarga los datos |
+| `connect_error 611` en la consola | La sesión se cerró en otra pestaña o venció el token: vuelva a iniciar sesión |
+| El chat no conecta en Seenode | El servicio debe permitir WebSocket; Socket.io cae a *long polling* si el proxy no lo permite |
 | `pnpm` no existe | `corepack enable` |
 
 ---
@@ -600,7 +708,8 @@ frecuentes en [`docs/DESPLIEGUE.md`](docs/DESPLIEGUE.md).
 |---|---|---|
 | v1 · Núcleo | 44 endpoints del documento 06, FEFO, crédito, anulación, auditoría, reportes, motor financiero | Completado |
 | v1.1 · Demostración y despliegue | Sembrado de 120 días con la misma lógica de negocio, `start:seenode`, guía de Seenode | Completado |
-| v1.2 · Apoyo a la experiencia 3D | Sin cambios de esquema: la aplicación dibuja en 3D los datos que ya expone la API | Completado · falta publicar en Seenode |
+| v1.2 · Apoyo a la experiencia 3D | Sin cambios de esquema (retirada en la v4 a pedido de la autora) | Reemplazado |
+| v4 · Tiempo real y página pública | Socket.io (chat, presencia, notificaciones, `datos:cambio`), búsqueda global, perfil propio, contacto público; migración 0002 | Completado · falta publicar en Seenode |
 
 ---
 
