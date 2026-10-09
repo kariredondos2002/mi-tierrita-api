@@ -11,9 +11,12 @@ Tres piezas en el mismo *workspace* de Seenode: la base PostgreSQL, la API (web 
 
 ## 2. API (web service)
 
+Los dos repositorios son **privados**: al crear cada servicio, Seenode pide conectar la cuenta de GitHub
+`kariredondos2002` y elegir a qué repositorios puede acceder; marque `mi-tierrita-api` y `mi-tierrita-app`.
+
 | Campo | Valor |
 |---|---|
-| Repositorio | `KarinaRedondo/mi-tierrita-api`, rama `main` |
+| Repositorio | `kariredondos2002/mi-tierrita-api`, rama `main` |
 | Build command | `corepack enable && pnpm install --frozen-lockfile && pnpm build` |
 | Start command | `pnpm start:seenode` |
 | Port | `4300` |
@@ -40,7 +43,7 @@ Verificación: `https://<api>/health` responde `{"status":"ok","database":"up"}`
 
 | Campo | Valor |
 |---|---|
-| Repositorio | `KarinaRedondo/mi-tierrita-app`, rama `main` |
+| Repositorio | `kariredondos2002/mi-tierrita-app`, rama `main` |
 | Build command | `corepack enable && pnpm install --frozen-lockfile && pnpm build` |
 | Publish directory | `dist` |
 | Client-side routing | activado |
