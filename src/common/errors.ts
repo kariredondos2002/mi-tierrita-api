@@ -14,6 +14,7 @@ export const ErrorCodes = {
   SUPPLIER_NOT_FOUND: "605",
   SALE_NOT_FOUND: "606",
   SCENARIO_NOT_FOUND: "607",
+  CONTACT_MESSAGE_NOT_FOUND: "608",
 
   INVALID_CREDENTIALS: "610",
   TOKEN_INVALID: "611",
@@ -32,6 +33,9 @@ export const ErrorCodes = {
 
   TOO_MANY_ATTEMPTS: "640",
 
+  AI_UNAVAILABLE: "660",
+  AI_FAILED: "661",
+
   INVALID_SCENARIO: "650",
 } as const;
 
@@ -49,6 +53,7 @@ export const httpStatusByCode: Record<ErrorCode, number> = {
   "605": 404,
   "606": 404,
   "607": 404,
+  "608": 404,
   "610": 401,
   "611": 401,
   "612": 401,
@@ -62,6 +67,8 @@ export const httpStatusByCode: Record<ErrorCode, number> = {
   "630": 409,
   "631": 409,
   "640": 429,
+  "660": 503,
+  "661": 502,
   "650": 422,
 };
 

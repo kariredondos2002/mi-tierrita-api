@@ -137,6 +137,7 @@ sensibilidad univariada y bivariada y diagrama de tornado.
 | Búsqueda global (v4) | Productos, clientes, proveedores, ventas y personas según el rol (Ctrl + K) | `GET /search` |
 | Mi perfil (v4.2) | Nombre, apellido, correo y teléfono propios; cambio de contraseña; mi actividad de los últimos 30 días | `PUT /users/me` · `GET /users/me/activity` |
 | Contacto público (v4) | Formulario de la página de inicio (5 envíos por hora por IP) y bandeja del administrador | `/contact` |
+| Tita, asistente con IA | Resumen del día por rol, conversación con herramientas de consulta y de acción que la persona confirma, borradores y lectura de facturas. Opcional: sin `ANTHROPIC_API_KEY` la API responde 660 y la app oculta la IA | `/ai/status` · `/ai/briefing` · `/ai/chat` · `/ai/drafts` · `/ai/invoice` |
 | Salud y documentación | `GET /health` y Swagger UI en `/docs` | RNF |
 
 ---
@@ -411,6 +412,8 @@ Los crea `pnpm db:seed`:
 | `JWT_SECRET` | 32+ caracteres aleatorios | Firma de los tokens; sin valor por defecto en producción |
 | `JWT_EXPIRES_IN` | `8h` | Vigencia del token |
 | `CORS_ORIGINS` | `http://localhost:5173` | Dominios del frontend permitidos, separados por coma |
+| `ANTHROPIC_API_KEY` | vacío | Clave de Claude (Anthropic) para Tita. Opcional |
+| `AI_MODEL` / `AI_FAST_MODEL` | `claude-sonnet-5-5` / `claude-haiku-5-5` | Modelo de Tita y de los textos cortos |
 | `SEED_DEMO` | `true` | (Seenode) siembra la demo al arrancar si la base está vacía |
 
 Ningún valor sensible va en el código, en la imagen ni en el repositorio.
@@ -534,6 +537,7 @@ Base: `http://localhost:4300/api/v1` · Todo excepto `POST /auth/signin`, `POST 
 | GET | `/users/me/activity` | todos | Mis últimas acciones y conteos de 30 días (v4.2) |
 | POST | `/contact` | **público** · 5/h por IP | Formulario de la página de inicio |
 | GET · POST | `/contact` · `/contact/:id/handled` | ADMIN | Bandeja y marcar atendido |
+| GET · POST | `/ai/status` · `/ai/briefing` · `/ai/chat` · `/ai/drafts` · `/ai/invoice` | según rol | Tita: las acciones no escriben; la app las ejecuta si la persona confirma (cabecera `X-AI-Suggested`) |
 
 ### Ejemplo con curl
 
@@ -646,6 +650,8 @@ a un mensaje claro.
 | 630 | Recurso duplicado | 409 |
 | 631 | Categoría con productos asociados | 409 |
 | 640 | Demasiados intentos de acceso | 429 |
+| 660 | IA no configurada (falta `ANTHROPIC_API_KEY`) | 503 |
+| 661 | Falló la consulta al servicio de IA | 502 |
 | 650 | Escenario financiero inválido | 422 |
 
 ---

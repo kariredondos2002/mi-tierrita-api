@@ -8,3 +8,4 @@ export * from "./sales";
 export * from "./audits";
 export * from "./financial";
 export * from "./realtime";
+export * from "./ai";
