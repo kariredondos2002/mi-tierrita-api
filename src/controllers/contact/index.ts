@@ -5,7 +5,10 @@ import { createContactMessage, listContactMessages, markContactHandled } from ".
 
 /** POST /api/v1/contact — PÚBLICA (formulario de la página de inicio), con límite de envíos. */
 export const createContactController: RequestHandler = async (req, res) => {
-  const saved = await createContactMessage(parseContact(req.body));
+  const { trap, ...input } = parseContact(req.body);
+  // Campo trampa lleno: se responde igual que si se hubiera guardado, pero no se guarda ni se avisa a nadie.
+  if (trap) return void res.status(201).json({ id: 0, createdAt: new Date().toISOString() });
+  const saved = await createContactMessage(input);
   res.status(201).json({ id: saved.id, createdAt: saved.createdAt });
 };
 

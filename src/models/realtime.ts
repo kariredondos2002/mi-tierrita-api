@@ -34,6 +34,7 @@ export type MessageRow = {
   replyPreview: string | null;
   replyKind: MessageKind | null;
   threadRootId: number | null;
+  clientId: string | null;
   replyCount: number;
   pinnedAt: Date | null;
   pinnedBy: number | null;
@@ -62,6 +63,8 @@ export type MessageResponse = {
   createdAt: string;
   replyTo: { id: number; senderName: string; preview: string; kind: MessageKind } | null;
   threadRootId: number | null;
+  /** Identificador que generó el cliente al enviar; permite fusionar el envío optimista sin duplicar. */
+  clientId: string | null;
   replyCount: number;
   pinnedAt: string | null;
   pinnedBy: number | null;
@@ -96,6 +99,7 @@ export const toMessageResponse = (row: MessageRow): MessageResponse => ({
   replyCount: row.replyCount,
   pinnedAt: row.pinnedAt === null ? null : row.pinnedAt.toISOString(),
   pinnedBy: row.pinnedBy,
+  clientId: row.clientId,
   mentions: row.mentions,
   attachment:
     row.attachmentId === null
@@ -258,15 +262,35 @@ export type SearchResponse = {
 
 // --- contacto público ---
 
-export type ContactRequest = { name: string; email: string; phone?: string | undefined; message: string };
-export type ContactResponse = ContactRequest & { id: number; handled: boolean; createdAt: string };
+export type ContactRequest = { name: string; email?: string | undefined; phone?: string | undefined; topic?: string | undefined; message: string };
+export type ContactResponse = Omit<ContactRequest, "email"> & { email: string | null; id: number; handled: boolean; createdAt: string };
+/** Entrada del formulario público; `trap` es true si se llenó el campo oculto `website` (spam). */
+export type ContactInput = ContactRequest & { trap: boolean };
 
-export const parseContact = (body: unknown): ContactRequest => {
-  const v = createValidator(body);
+/**
+ * Formulario público: nombre, al menos un medio para responder (teléfono o correo) y el mensaje (`message`; se acepta
+ * `body` como sinónimo). `website` es un campo trampa que las personas no ven: si llega lleno, el mensaje se descarta
+ * en silencio.
+ */
+export const parseContact = (body: unknown): ContactInput => {
+  const src = (typeof body === "object" && body !== null ? body : {}) as Record<string, unknown>;
+  const v = createValidator(src["message"] === undefined && src["body"] !== undefined ? { ...src, message: src["body"] } : body);
   const name = v.string("name", { min: 2, max: 120 });
-  const email = v.string("email", { min: 5, max: 160, pattern: /^[^\s@]+@[^\s@]+\.[^\s@]+$/, patternMessage: "Correo inválido" });
+  const email = v.string("email", { min: 5, max: 160, pattern: /^[^\s@]+@[^\s@]+\.[^\s@]+$/, patternMessage: "Correo inválido" }, false);
   const phone = v.string("phone", { max: 40 }, false);
-  const message = v.string("message", { min: 10, max: 2000 });
+  const topic = v.string("topic", { min: 1, max: 80 }, false);
+  const message = v.string("message", { min: 5, max: 2000 });
+  const website = v.string("website", { max: 200 }, false);
+  if ((email === undefined || email === "") && (phone === undefined || phone === "") && !v.issues().some((i) => i.path === "email" || i.path === "phone")) {
+    v.custom("phone", "Deje un teléfono o un correo para poder responderle");
+  }
   v.done();
-  return { name: name as string, email: email as string, phone: phone === "" ? undefined : phone, message: message as string };
+  return {
+    name: name as string,
+    email: email === undefined || email === "" ? undefined : email.toLowerCase(),
+    phone: phone === undefined || phone === "" ? undefined : phone,
+    topic: topic === undefined || topic === "" ? undefined : topic,
+    message: message as string,
+    trap: Boolean(website),
+  };
 };

@@ -24,7 +24,7 @@ export const MESSAGE_SELECT = `
          m.content, m.kind, m.read_at AS "readAt", m.created_at AS "createdAt",
          m.reply_to_id AS "replyToId", (ru.first_name || ' ' || ru.last_name) AS "replySenderName",
          rm.content AS "replyPreview", rm.kind AS "replyKind",
-         m.thread_root_id AS "threadRootId",
+         m.thread_root_id AS "threadRootId", m.client_id AS "clientId",
          (SELECT COUNT(*) FROM messages t WHERE t.thread_root_id = m.id)::int AS "replyCount",
          m.pinned_at AS "pinnedAt", m.pinned_by AS "pinnedBy",
          COALESCE((SELECT array_agg(mm.user_id::int ORDER BY mm.user_id) FROM message_mentions mm WHERE mm.message_id = m.id), '{}') AS mentions,

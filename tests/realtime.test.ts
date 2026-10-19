@@ -43,7 +43,7 @@ test("toMessageResponse expone el emisor sin datos sensibles", () => {
     id: 1, senderId: 2, senderName: "Ana Gil", senderUsername: "ana", senderRole: "SALES",
     recipientId: null, content: "hola", readAt: null, createdAt: new Date("2026-10-01T10:00:00Z"),
     kind: "TEXT", replyToId: null, replySenderName: null, replyPreview: null, replyKind: null,
-    threadRootId: null, replyCount: 0, pinnedAt: null, pinnedBy: null, mentions: [],
+    threadRootId: null, clientId: null, replyCount: 0, pinnedAt: null, pinnedBy: null, mentions: [],
     attachmentId: null, attachmentName: null, attachmentMime: null, attachmentSize: null, attachmentDuration: null,
     receiptsTotal: 0, receiptsDelivered: 0, receiptsRead: 0,
   });
@@ -51,11 +51,14 @@ test("toMessageResponse expone el emisor sin datos sensibles", () => {
   assert.equal(r.createdAt, "2026-10-01T10:00:00.000Z");
 });
 
-test("parseContact valida correo y mensaje mínimo; el teléfono es opcional", () => {
+test("parseContact pide teléfono o correo, acepta body como sinónimo y detecta la trampa", () => {
   assert.deepEqual(parseContact({ name: "Rosa", email: "rosa@x.co", message: "Necesito una cotización" }), {
-    name: "Rosa", email: "rosa@x.co", phone: undefined, message: "Necesito una cotización",
+    name: "Rosa", email: "rosa@x.co", phone: undefined, topic: undefined, message: "Necesito una cotización", trap: false,
   });
+  assert.equal(parseContact({ name: "Rosa", phone: "3001234567", body: "Quiero precios", topic: "Medicina veterinaria" }).topic, "Medicina veterinaria");
+  assert.throws(() => parseContact({ name: "Rosa", message: "Sin forma de responder" }), is400);
   assert.throws(() => parseContact({ name: "Rosa", email: "rosa", message: "corto" }), is400);
+  assert.equal(parseContact({ name: "Bot", email: "b@x.co", message: "spam spam", website: "http://spam" }).trap, true);
 });
 
 test("parseUpdateProfile exige nombre y apellido", () => {
