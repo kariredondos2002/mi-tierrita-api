@@ -53,3 +53,7 @@ No inventar endpoints ni tablas que no estén ahí sin dejarlo escrito en el REA
 15. Los PDF y Excel se arman en `business-logic/exports/` con `pdf-theme.ts` (colores «Campo abierto», encabezado
     con «Generado por», gráficos vectoriales, tabla y pie «Página n de N»). Un reporte nuevo reutiliza esos
     helpers y su controlador pasa por `send()` para quedar auditado; nunca generar el PDF en el navegador.
+16. **Chat v4.5**: cada mensaje tiene recibos por persona (`message_receipts`); el autor es el único que ve el detalle
+    (`forAudience` anula `receipts` para los demás). Todo envío pasa por `business-logic/chat/deliver.ts#sendMessage`
+    (REST y Socket.io comparten la misma ruta), con `clientId` para no duplicar. Los adjuntos y el audio se
+    descargan solo si la persona puede ver el mensaje (`readAttachment`). Prueba con base real: `tests/chat-avanzado.test.ts`.

@@ -230,7 +230,7 @@ POST /sales  (token de la Secretaria)
                  │     io.use(auth JWT) → join canal:general,            │
                  │                         usuario:<id>, rol:<ROL>       │
                  │     chat-handler: chat:mensaje · chat:privado ·       │
-                 │                   chat:leido · chat:escribiendo        │
+                 │                   chat:leido · chat:fijar · escribiendo │
                  │     presence: Map usuario → Set<socketId>             │
                  └──────────────┬────────────────────────────────────────┘
                                 │ emitter.ts (emitToAll / emitToUsers / emitToRoles)
@@ -527,7 +527,13 @@ Base: `http://localhost:4300/api/v1` · Todo excepto `POST /auth/signin`, `POST 
 |---|---|---|---|
 | GET · POST | `/chat/general?before&limit` | todos | Historial del canal general · enviar (respaldo de `chat:mensaje`) |
 | GET | `/chat/conversations` | todos | Privadas con último mensaje y no leídos |
-| GET | `/chat/people` · `/chat/online` · `/chat/unread` | todos | Directorio con última conexión · en línea · total sin leer |
+| GET | `/chat/people` · `/chat/online` · `/chat/unread` | todos | Directorio con última conexión · en línea · sin leer (`unread`, `general`, `privates`, `mentions`) |
+| POST | `/chat/messages` | todos | Envío completo (v4.5): texto, `replyToId` (cita), `threadRootId` (hilo), `attachmentId`, `clientId` (evita duplicados) y `recipientId` (privado) |
+| GET | `/chat/messages/:id/receipts` | autor | Quién recibió, quién vio y quién sigue pendiente (613 si no es el autor) |
+| GET | `/chat/messages/:id/thread` · PUT `/chat/messages/:id/pin` `{pinned}` | participantes · ADMIN en el general | Hilo con sus respuestas · fijar o desfijar |
+| GET | `/chat/pinned?scope` · `/chat/search?q&scope&limit` | todos | Fijados · búsqueda solo entre lo que la persona puede ver |
+| POST · GET | `/chat/attachments` · `/chat/attachments/:id` | todos | Subir (cuerpo binario, `X-File-Name`, `X-Duration-Ms`; 6 MB; imágenes, PDF, Office, texto y audio) · descargar con permisos |
+| POST | `/chat/general/read` | todos | Marcar visto el canal general |
 | GET · POST | `/chat/private/:userId` | todos | Historial privado · enviar (respaldo de `chat:privado`) |
 | POST | `/chat/private/:userId/read` | todos | Marcar como leída (emite `chat:leido`) |
 | GET | `/notifications` | todos | Últimas 30 y total sin leer |
@@ -568,9 +574,10 @@ por *ack* `{ ok: true, … }` o `{ ok: false, error: "<código>" }`. Límite: 12
 
 | Evento | Datos | Ack | Efecto |
 |---|---|---|---|
-| `chat:mensaje` | `"texto"` | `{ ok, message }` | Guarda y emite `chat:mensaje` a `canal:general` |
-| `chat:privado` | `{ recipientId, content }` | `{ ok, message }` | Guarda y emite `chat:privado` a `usuario:<emisor>` y `usuario:<receptor>` |
-| `chat:leido` | `{ userId }` | `{ ok, updated }` | Marca leídos los mensajes de esa persona y emite `chat:leido` |
+| `chat:mensaje` | `"texto"` o `{ content?, replyToId?, threadRootId?, attachmentId?, clientId? }` | `{ ok, message }` | Guarda y emite `chat:mensaje` a `canal:general`; un `clientId` repetido devuelve el mismo mensaje (sin duplicados) |
+| `chat:privado` | `{ recipientId, content?, replyToId?, threadRootId?, attachmentId?, clientId? }` | `{ ok, message }` | Guarda y emite `chat:privado` a `usuario:<emisor>` y `usuario:<receptor>` (también sirve para «responder en privado» citando un mensaje del grupo, sin publicar nada en él) |
+| `chat:leido` | `{ userId }` o `{ scope: "general" }` | `{ ok, updated }` | Marca visto y emite `chat:leido` y `chat:recibos` |
+| `chat:fijar` | `{ messageId, pinned }` | `{ ok, message }` | Fija o desfija (en el general solo ADMIN) y emite `chat:fijado` |
 | `chat:escribiendo` | `{ recipientId \| null, typing }` | — | Reenvía a la sala general o solo al destinatario |
 
 **Servidor → cliente**
@@ -579,7 +586,9 @@ por *ack* `{ ok: true, … }` o `{ ok: false, error: "<código>" }`. Límite: 12
 |---|---|---|
 | `chat:historial` | el socket que se conecta | `{ messages, hasMore }` (últimos 40 del canal general) |
 | `chat:mensaje` · `chat:privado` | general · emisor y receptor | `Message` |
-| `chat:leido` | emisor y lector | `{ readerId, otherId, at }` |
+| `chat:leido` | lector (y la otra persona en privado) | `{ readerId, scope, otherId?, at }` |
+| `chat:recibos` | autor del mensaje | `{ updates: [{ messageId, total, delivered, read }] }` — alimenta los chulitos ✓ enviado · ✓✓ entregado · ✓✓ azul visto |
+| `chat:fijado` | general o los dos de un privado | `Message` (con `pinnedAt`) |
 | `chat:escribiendo` | general o destinatario | `{ from, recipientId, typing }` |
 | `usuarios:conectados` | el socket que se conecta | `Person[]` |
 | `usuario:conectado` · `usuario:desconectado` | general | `Person` · `{ id, lastSeenAt }` |
@@ -650,6 +659,7 @@ a un mensaje claro.
 | 630 | Recurso duplicado | 409 |
 | 631 | Categoría con productos asociados | 409 |
 | 640 | Demasiados intentos de acceso | 429 |
+| 609 | Mensaje no encontrado o que la persona no puede ver | 404 |
 | 660 | IA no configurada (falta `ANTHROPIC_API_KEY`) | 503 |
 | 661 | Falló la consulta al servicio de IA | 502 |
 | 650 | Escenario financiero inválido | 422 |
@@ -685,6 +695,7 @@ pnpm test
 | `pagination.test.ts` | 4 | `?page` y `?limit` y la respuesta paginada |
 | `errors.test.ts` | 3 | Traducción de errores de dominio y de PostgreSQL |
 | `token.test.ts` | 2 | Firma y verificación del JWT |
+| `chat-avanzado.test.ts` | 6 | Con PostgreSQL real (se omite sin base): chulitos y detalle por persona, `clientId` sin duplicados, privacidad de privados y búsqueda, citas e hilos, respuesta privada, fijados, menciones, adjuntos y audio |
 | `realtime.test.ts` | 11 | Entradas del chat, contacto y perfil (correo y teléfono); escape de la búsqueda; presencia con varias pestañas; el emisor entrega a la sala correcta con dos clientes Socket.io reales |
 | `exports.test.ts` | 2 | El tema de los PDF produce un documento válido (`%PDF`) con gráficos, tabla de varias páginas y pie; formato de dinero y recorte de etiquetas |
 | **Total** | **37** | ✔ 35 pasan · 2 omitidas sin el archivo del modelo |

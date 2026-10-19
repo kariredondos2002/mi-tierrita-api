@@ -708,6 +708,60 @@ paths:
       summary: Enviar al canal general (respaldo REST de chat:mensaje)
       requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/MessageContent" } } } }
       responses: { "201": { description: Mensaje guardado y difundido, content: { application/json: { schema: { $ref: "#/components/schemas/Message" } } } }, "400": { $ref: "#/components/responses/Validation" } }
+  /chat/messages:
+    post:
+      tags: [Chat]
+      summary: Enviar con cita, hilo, adjunto o audio; clientId evita duplicados (v4.5)
+      requestBody: { required: true, content: { application/json: { schema: { type: object, properties: { content: { type: string, maxLength: 2000 }, recipientId: { type: [integer, "null"] }, replyToId: { type: integer }, threadRootId: { type: integer }, attachmentId: { type: integer }, clientId: { type: string, format: uuid } } } } } }
+      responses: { "201": { description: Mensaje guardado, content: { application/json: { schema: { $ref: "#/components/schemas/Message" } } } }, "400": { $ref: "#/components/responses/Validation" }, "404": { description: 609 / 603 } }
+  /chat/messages/{id}/receipts:
+    parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+    get:
+      tags: [Chat]
+      summary: Detalle de recibos (solo el autor) con PENDING, DELIVERED o READ por persona
+      responses: { "200": { description: Detalle }, "403": { description: 613 no es el autor } }
+  /chat/messages/{id}/thread:
+    parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+    get:
+      tags: [Chat]
+      summary: Mensaje raíz y sus respuestas
+      responses: { "200": { description: Hilo }, "404": { description: 609 } }
+  /chat/messages/{id}/pin:
+    parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+    put:
+      tags: [Chat]
+      summary: Fijar o desfijar (en el canal general solo ADMIN)
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [pinned], properties: { pinned: { type: boolean } } } } } }
+      responses: { "200": { description: Mensaje actualizado, content: { application/json: { schema: { $ref: "#/components/schemas/Message" } } } }, "403": { description: 613 } }
+  /chat/pinned:
+    get:
+      tags: [Chat]
+      summary: Mensajes fijados de una conversación (scope=general o id de persona)
+      responses: { "200": { description: Fijados } }
+  /chat/search:
+    get:
+      tags: [Chat]
+      summary: Buscar solo entre los mensajes que la persona puede ver
+      parameters: [{ name: q, in: query, required: true, schema: { type: string } }, { name: scope, in: query, schema: { type: string } }, { name: limit, in: query, schema: { type: integer } }]
+      responses: { "200": { description: Resultados } }
+  /chat/attachments:
+    post:
+      tags: [Chat]
+      summary: Subir archivo o nota de voz (cuerpo binario, máximo 6 MB)
+      parameters: [{ name: X-File-Name, in: header, schema: { type: string } }, { name: X-Duration-Ms, in: header, schema: { type: integer } }]
+      requestBody: { required: true, content: { "*/*": { schema: { type: string, format: binary } } } }
+      responses: { "201": { description: Adjunto creado }, "400": { $ref: "#/components/responses/Validation" } }
+  /chat/attachments/{id}:
+    parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+    get:
+      tags: [Chat]
+      summary: Descargar un adjunto (solo quien puede ver el mensaje)
+      responses: { "200": { description: Archivo }, "404": { description: 609 } }
+  /chat/general/read:
+    post:
+      tags: [Chat]
+      summary: Marcar visto el canal general
+      responses: { "200": { description: Marcados } }
   /chat/conversations:
     get:
       tags: [Chat]

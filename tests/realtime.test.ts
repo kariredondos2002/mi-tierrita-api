@@ -42,6 +42,10 @@ test("toMessageResponse expone el emisor sin datos sensibles", () => {
   const r = toMessageResponse({
     id: 1, senderId: 2, senderName: "Ana Gil", senderUsername: "ana", senderRole: "SALES",
     recipientId: null, content: "hola", readAt: null, createdAt: new Date("2026-10-01T10:00:00Z"),
+    kind: "TEXT", replyToId: null, replySenderName: null, replyPreview: null, replyKind: null,
+    threadRootId: null, replyCount: 0, pinnedAt: null, pinnedBy: null, mentions: [],
+    attachmentId: null, attachmentName: null, attachmentMime: null, attachmentSize: null, attachmentDuration: null,
+    receiptsTotal: 0, receiptsDelivered: 0, receiptsRead: 0,
   });
   assert.deepEqual(r.sender, { id: 2, name: "Ana Gil", username: "ana", role: "SALES" });
   assert.equal(r.createdAt, "2026-10-01T10:00:00.000Z");
