@@ -1,7 +1,7 @@
 import PDFDocument from "pdfkit";
 
 /**
- * Plantilla PDF «Campo abierto» para los reportes gerenciales (v4.4).
+ * Plantilla PDF «Verde pastel» para los reportes gerenciales (v4.4).
  *
  * Es la única fuente de estilo y de componentes de los PDF: encabezado institucional con franja de
  * metadatos, resumen ejecutivo, tarjetas de indicadores, gráficos vectoriales (barras, barras
@@ -14,22 +14,22 @@ import PDFDocument from "pdfkit";
  * cero real («0» o «$ 0»), dato no disponible («N/D») y campo que no aplica («N/A»).
  */
 export const C = {
-  black: "#121315",
-  ink: "#1D1E20",
-  ink2: "#4A4D52",
-  muted: "#7B7F86",
-  line: "#E3E6EC",
-  zebra: "#F4F5F7",
-  panel: "#F7F8FA",
-  shadow: "#ECEEF2",
-  lime: "#14F77B",
-  olive: "#2F3A13",
-  green: "#2F7A3E",
-  greenSoft: "#EEF5EC",
+  black: "#1D6B3E",
+  ink: "#1C2420",
+  ink2: "#4B5650",
+  muted: "#7A847E",
+  line: "#E1E9E4",
+  zebra: "#F4F7F5",
+  panel: "#F8FAF9",
+  shadow: "#EAF0EC",
+  lime: "#9FD3B2",
+  olive: "#1D6B3E",
+  green: "#2F9E5B",
+  greenSoft: "#E6F4EA",
   harvest: "#E3A33B",
-  bad: "#C23B2E",
+  bad: "#D4554F",
   sky: "#3A7CA5",
-  chart: ["#2F7A3E", "#E3A33B", "#3A7CA5", "#C0612B", "#2F3A13", "#8AA65A"],
+  chart: ["#2F9E5B", "#E3A33B", "#3A7CA5", "#D4554F", "#1D6B3E", "#9FD3B2"],
 } as const;
 
 export type Doc = PDFKit.PDFDocument;
@@ -37,10 +37,10 @@ export type Generator = { name: string; username: string };
 export type Tone = "neutral" | "good" | "warn" | "bad";
 
 const TONE: Record<Tone, { solid: string; bg: string; fg: string }> = {
-  neutral: { solid: C.olive, bg: "#ECEEF1", fg: "#4A4D52" },
-  good: { solid: C.green, bg: "#E3F1E5", fg: "#1F5F2D" },
+  neutral: { solid: C.olive, bg: "#EAF0EC", fg: "#4B5650" },
+  good: { solid: C.green, bg: "#E6F4EA", fg: "#175A33" },
   warn: { solid: C.harvest, bg: "#FBEFD5", fg: "#8A5A0B" },
-  bad: { solid: C.bad, bg: "#F8E0DD", fg: "#9B2C22" },
+  bad: { solid: C.bad, bg: "#FBE0DE", fg: "#A63A35" },
 };
 
 // ------------------------------------------------------------------ formatos

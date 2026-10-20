@@ -50,7 +50,7 @@ No inventar endpoints ni tablas que no estén ahí sin dejarlo escrito en el REA
 
 ## Reportes (v4.2)
 
-15. Los PDF y Excel se arman en `business-logic/exports/` con `pdf-theme.ts` (colores «Campo abierto», encabezado
+15. Los PDF y Excel se arman en `business-logic/exports/` con `pdf-theme.ts` (colores «Verde pastel», encabezado
     con «Generado por», gráficos vectoriales, tabla y pie «Página n de N»). Un reporte nuevo reutiliza esos
     helpers y su controlador pasa por `send()` para quedar auditado; nunca generar el PDF en el navegador.
 16. **Chat v4.5**: cada mensaje tiene recibos por persona (`message_receipts`); el autor es el único que ve el detalle
