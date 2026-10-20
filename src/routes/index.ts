@@ -14,6 +14,7 @@ import { financialRouter } from "./financial";
 import { chatRouter } from "./chat";
 import { notificationsRouter } from "./notifications";
 import { searchRouter } from "./search";
+import { aiRouter } from "./ai";
 import { contactPublicRouter, contactRouter } from "./contact";
 
 export { healthRouter } from "./health";
@@ -51,3 +52,4 @@ apiRouter.use("/chat", chatRouter);
 apiRouter.use("/notifications", notificationsRouter);
 apiRouter.use("/search", searchRouter);
 apiRouter.use("/contact", contactRouter);
+apiRouter.use("/ai", aiRouter); // Tita: asistente con IA (opcional según ANTHROPIC_API_KEY)

@@ -13,6 +13,11 @@ export type PersonSummary = { id: number; name: string; username: string; role: 
 
 export type DirectoryEntry = PersonSummary & { lastSeenAt: string | null; online: boolean };
 
+export type MessageKind = "TEXT" | "AUDIO" | "FILE";
+
+/** Adjunto de un mensaje (el archivo se descarga aparte, con permisos, por /chat/attachments/:id). */
+export type AttachmentInfo = { id: number; fileName: string; mimeType: string; sizeBytes: number; durationMs: number | null };
+
 export type MessageRow = {
   id: number;
   senderId: number;
@@ -21,17 +26,61 @@ export type MessageRow = {
   senderRole: Role;
   recipientId: number | null;
   content: string;
+  kind: MessageKind;
   readAt: Date | null;
   createdAt: Date;
+  replyToId: number | null;
+  replySenderName: string | null;
+  replyPreview: string | null;
+  replyKind: MessageKind | null;
+  threadRootId: number | null;
+  clientId: string | null;
+  replyCount: number;
+  pinnedAt: Date | null;
+  pinnedBy: number | null;
+  mentions: number[];
+  attachmentId: number | null;
+  attachmentName: string | null;
+  attachmentMime: string | null;
+  attachmentSize: number | null;
+  attachmentDuration: number | null;
+  /** Solo el autor ve los recibos; para los demás vienen en null. */
+  receiptsTotal: number | null;
+  receiptsDelivered: number | null;
+  receiptsRead: number | null;
 };
+
+/** Resumen de recibos de un mensaje propio: cuántos lo recibieron y cuántos lo vieron. */
+export type ReceiptSummary = { total: number; delivered: number; read: number };
 
 export type MessageResponse = {
   id: number;
   sender: PersonSummary;
   recipientId: number | null;
   content: string;
+  kind: MessageKind;
   readAt: string | null;
   createdAt: string;
+  replyTo: { id: number; senderName: string; preview: string; kind: MessageKind } | null;
+  threadRootId: number | null;
+  /** Identificador que generó el cliente al enviar; permite fusionar el envío optimista sin duplicar. */
+  clientId: string | null;
+  replyCount: number;
+  pinnedAt: string | null;
+  pinnedBy: number | null;
+  mentions: number[];
+  attachment: AttachmentInfo | null;
+  /** Solo en mensajes propios. */
+  receipts: ReceiptSummary | null;
+};
+
+const PREVIEW_LENGTH = 140;
+
+/** Texto corto de una cita: el contenido o, si es audio o archivo sin texto, una etiqueta. */
+export const previewOf = (content: string, kind: MessageKind): string => {
+  const text = content.trim().replace(/\s+/g, " ");
+  if (text !== "") return text.length > PREVIEW_LENGTH ? `${text.slice(0, PREVIEW_LENGTH - 1)}…` : text;
+  return kind === "AUDIO" ? "Mensaje de audio" : kind === "FILE" ? "Archivo adjunto" : "";
 };
 
 export const toMessageResponse = (row: MessageRow): MessageResponse => ({
@@ -39,15 +88,35 @@ export const toMessageResponse = (row: MessageRow): MessageResponse => ({
   sender: { id: row.senderId, name: row.senderName, username: row.senderUsername, role: row.senderRole },
   recipientId: row.recipientId,
   content: row.content,
+  kind: row.kind,
   readAt: row.readAt === null ? null : row.readAt.toISOString(),
   createdAt: row.createdAt.toISOString(),
+  replyTo:
+    row.replyToId === null
+      ? null
+      : { id: row.replyToId, senderName: row.replySenderName ?? "", preview: previewOf(row.replyPreview ?? "", row.replyKind ?? "TEXT"), kind: row.replyKind ?? "TEXT" },
+  threadRootId: row.threadRootId,
+  replyCount: row.replyCount,
+  pinnedAt: row.pinnedAt === null ? null : row.pinnedAt.toISOString(),
+  pinnedBy: row.pinnedBy,
+  clientId: row.clientId,
+  mentions: row.mentions,
+  attachment:
+    row.attachmentId === null
+      ? null
+      : { id: row.attachmentId, fileName: row.attachmentName ?? "archivo", mimeType: row.attachmentMime ?? "application/octet-stream", sizeBytes: row.attachmentSize ?? 0, durationMs: row.attachmentDuration },
+  receipts: row.receiptsTotal === null ? null : { total: row.receiptsTotal, delivered: row.receiptsDelivered ?? 0, read: row.receiptsRead ?? 0 },
 });
+
+/** Se quita lo que solo el autor debe ver antes de difundir un mensaje a otras personas. */
+export const forAudience = (m: MessageResponse): MessageResponse => ({ ...m, receipts: null });
 
 export type MessagePage = { messages: MessageResponse[]; hasMore: boolean };
 
+/** `scope` identifica la conversación: "general" o el id de la otra persona. */
 export type ConversationResponse = {
   person: PersonSummary;
-  lastMessage: { id: number; content: string; senderId: number; createdAt: string };
+  lastMessage: { id: number; content: string; kind: MessageKind; senderId: number; createdAt: string };
   unread: number;
 };
 
@@ -66,6 +135,55 @@ export const parsePrivateMessage = (body: unknown): { recipientId: number; conte
   v.done();
   return { recipientId: recipientId as number, content: content as string };
 };
+
+/** Envío completo (v4.5): texto y/o adjunto, con cita, hilo, destinatario y un identificador contra duplicados. */
+export type SendMessageInput = {
+  content: string;
+  recipientId: number | null;
+  replyToId: number | null;
+  threadRootId: number | null;
+  attachmentId: number | null;
+  clientId: string | null;
+};
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export const parseSendMessage = (body: unknown): SendMessageInput => {
+  const v = createValidator(body);
+  const content = v.string("content", { max: MESSAGE_MAX_LENGTH }, false) ?? "";
+  const recipientId = v.number("recipientId", { integer: true, min: 1 }, false);
+  const replyToId = v.number("replyToId", { integer: true, min: 1 }, false);
+  const threadRootId = v.number("threadRootId", { integer: true, min: 1 }, false);
+  const attachmentId = v.number("attachmentId", { integer: true, min: 1 }, false);
+  const clientId = v.string("clientId", { max: 36, pattern: UUID, patternMessage: "Debe ser un UUID" }, false);
+  const trimmed = content.trim();
+  if (trimmed === "" && attachmentId === undefined) v.custom("content", "Escriba un mensaje o adjunte un archivo");
+  v.done();
+  return {
+    content: trimmed,
+    recipientId: recipientId ?? null,
+    replyToId: replyToId ?? null,
+    threadRootId: threadRootId ?? null,
+    attachmentId: attachmentId ?? null,
+    clientId: clientId ?? null,
+  };
+};
+
+/** Búsqueda en el chat: ?q=texto&scope=general|<id de persona>&limit=. */
+export type ChatSearchQuery = { q: string; scope: "general" | number | null; limit: number };
+
+export const parseChatSearch = (query: Record<string, unknown>): ChatSearchQuery => {
+  const q = typeof query["q"] === "string" ? query["q"].trim().slice(0, 80) : "";
+  const rawScope = query["scope"];
+  const num = Number(rawScope);
+  const scope = rawScope === "general" ? "general" : Number.isInteger(num) && num > 0 ? num : null;
+  const rawLimit = Number(query["limit"]);
+  return { q, scope, limit: Number.isInteger(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, 50) : 30 };
+};
+
+/** Tipos de archivo admitidos como adjunto y su límite (6 MB). */
+export const ATTACHMENT_MAX_BYTES = 6 * 1024 * 1024;
+export const ATTACHMENT_MIME = /^(audio\/(webm|ogg|mp4|mpeg|wav|x-m4a|aac)|image\/(png|jpeg|webp|gif)|application\/(pdf|vnd\.openxmlformats-officedocument\.(wordprocessingml\.document|spreadsheetml\.sheet)|msword|vnd\.ms-excel)|text\/(plain|csv))(;.*)?$/i;
 
 /** Cursor de historial: ?before=<ISO>&limit=<1..100>. */
 export type HistoryQuery = { before?: Date | undefined; limit: number };
@@ -144,15 +262,35 @@ export type SearchResponse = {
 
 // --- contacto público ---
 
-export type ContactRequest = { name: string; email: string; phone?: string | undefined; message: string };
-export type ContactResponse = ContactRequest & { id: number; handled: boolean; createdAt: string };
+export type ContactRequest = { name: string; email?: string | undefined; phone?: string | undefined; topic?: string | undefined; message: string };
+export type ContactResponse = Omit<ContactRequest, "email"> & { email: string | null; id: number; handled: boolean; createdAt: string };
+/** Entrada del formulario público; `trap` es true si se llenó el campo oculto `website` (spam). */
+export type ContactInput = ContactRequest & { trap: boolean };
 
-export const parseContact = (body: unknown): ContactRequest => {
-  const v = createValidator(body);
+/**
+ * Formulario público: nombre, al menos un medio para responder (teléfono o correo) y el mensaje (`message`; se acepta
+ * `body` como sinónimo). `website` es un campo trampa que las personas no ven: si llega lleno, el mensaje se descarta
+ * en silencio.
+ */
+export const parseContact = (body: unknown): ContactInput => {
+  const src = (typeof body === "object" && body !== null ? body : {}) as Record<string, unknown>;
+  const v = createValidator(src["message"] === undefined && src["body"] !== undefined ? { ...src, message: src["body"] } : body);
   const name = v.string("name", { min: 2, max: 120 });
-  const email = v.string("email", { min: 5, max: 160, pattern: /^[^\s@]+@[^\s@]+\.[^\s@]+$/, patternMessage: "Correo inválido" });
+  const email = v.string("email", { min: 5, max: 160, pattern: /^[^\s@]+@[^\s@]+\.[^\s@]+$/, patternMessage: "Correo inválido" }, false);
   const phone = v.string("phone", { max: 40 }, false);
-  const message = v.string("message", { min: 10, max: 2000 });
+  const topic = v.string("topic", { min: 1, max: 80 }, false);
+  const message = v.string("message", { min: 5, max: 2000 });
+  const website = v.string("website", { max: 200 }, false);
+  if ((email === undefined || email === "") && (phone === undefined || phone === "") && !v.issues().some((i) => i.path === "email" || i.path === "phone")) {
+    v.custom("phone", "Deje un teléfono o un correo para poder responderle");
+  }
   v.done();
-  return { name: name as string, email: email as string, phone: phone === "" ? undefined : phone, message: message as string };
+  return {
+    name: name as string,
+    email: email === undefined || email === "" ? undefined : email.toLowerCase(),
+    phone: phone === undefined || phone === "" ? undefined : phone,
+    topic: topic === undefined || topic === "" ? undefined : topic,
+    message: message as string,
+    trap: Boolean(website),
+  };
 };

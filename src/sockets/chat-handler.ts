@@ -3,12 +3,14 @@ import { ErrorCodes, domainError, isDomainError } from "../common/index";
 import type { PersonSummary } from "../models/index";
 import { MESSAGE_MAX_LENGTH } from "../models/index";
 import {
+  deliverPending,
   generalHistory,
+  pinMessage,
   readConversation,
-  sendGeneralMessage,
-  sendPrivateMessage,
+  sendMessage,
   touchLastSeen,
 } from "../business-logic/chat/index";
+import { parseSendMessage } from "../models/index";
 import { Rooms } from "./emitter";
 import { addSocket, listOnline, removeSocket } from "./presence";
 
@@ -59,14 +61,17 @@ export const registerChatHandlers = (io: Server, socket: Socket): void => {
   socket.emit("usuarios:conectados", listOnline());
 
   // Historial reciente del canal general al conectar (y al reconectar).
-  void generalHistory({ limit: 40 })
+  void deliverPending(me.id).catch((err: unknown) => console.error("No se pudo marcar lo pendiente como entregado:", err));
+  void generalHistory(me.id, { limit: 40 })
     .then((page) => socket.emit("chat:historial", page))
     .catch((err: unknown) => console.error("No se pudo enviar el historial:", err));
 
-  socket.on("chat:mensaje", (content: unknown, ack: unknown) =>
+  // Acepta el texto solo (compatibilidad) o un objeto { content, replyToId, threadRootId, attachmentId, clientId }.
+  socket.on("chat:mensaje", (payload: unknown, ack: unknown) =>
     safely(ack, async () => {
       if (!allow()) throw domainError(ErrorCodes.TOO_MANY_ATTEMPTS);
-      return { message: await sendGeneralMessage(me.id, text(content)) };
+      const body = typeof payload === "string" ? { content: text(payload) } : { ...(payload as object), content: text((payload as { content?: unknown } | undefined)?.content) };
+      return { message: await sendMessage(me.id, { ...parseSendMessage(body), recipientId: null }) };
     }),
   );
 
@@ -75,15 +80,27 @@ export const registerChatHandlers = (io: Server, socket: Socket): void => {
       if (!allow()) throw domainError(ErrorCodes.TOO_MANY_ATTEMPTS);
       const recipientId = Number(payload?.recipientId);
       if (!Number.isInteger(recipientId) || recipientId <= 0) throw domainError(ErrorCodes.VALIDATION, [{ path: "recipientId", message: "Debe ser un entero positivo" }]);
-      return { message: await sendPrivateMessage(me.id, recipientId, text(payload?.content)) };
+      return { message: await sendMessage(me.id, parseSendMessage({ ...payload, content: text(payload?.content), recipientId })) };
     }),
   );
 
-  socket.on("chat:leido", (payload: { userId?: unknown } | undefined, ack: unknown) =>
+  // Visto: { userId } (privado) o { scope: "general" }. Marca los recibos y avisa a los autores.
+  socket.on("chat:leido", (payload: { userId?: unknown; scope?: unknown } | undefined, ack: unknown) =>
     safely(ack, async () => {
+      if (payload?.scope === "general") return { updated: await readConversation(me.id, "general") };
       const otherId = Number(payload?.userId);
       if (!Number.isInteger(otherId) || otherId <= 0) return { updated: 0 };
       return { updated: await readConversation(me.id, otherId) };
+    }),
+  );
+
+  socket.on("chat:fijar", (payload: { messageId?: unknown; pinned?: unknown } | undefined, ack: unknown) =>
+    safely(ack, async () => {
+      const messageId = Number(payload?.messageId);
+      if (!Number.isInteger(messageId) || messageId <= 0 || typeof payload?.pinned !== "boolean") {
+        throw domainError(ErrorCodes.VALIDATION, [{ path: "messageId", message: "Mensaje o estado inválido" }]);
+      }
+      return { message: await pinMessage(messageId, me.id, socket.data.role, payload.pinned) };
     }),
   );
 

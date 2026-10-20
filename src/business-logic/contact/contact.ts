@@ -2,17 +2,17 @@ import { db } from "../../data-sources/index";
 import type { ContactRequest, ContactResponse } from "../../models/index";
 import { onContactReceived } from "../notifications/index";
 
-type ContactRow = Omit<ContactResponse, "createdAt" | "phone"> & { phone: string | null; createdAt: Date };
+type ContactRow = Omit<ContactResponse, "createdAt" | "phone" | "topic"> & { phone: string | null; topic: string | null; createdAt: Date };
 
-const toResponse = (r: ContactRow): ContactResponse => ({ ...r, phone: r.phone ?? undefined, createdAt: r.createdAt.toISOString() });
+const toResponse = (r: ContactRow): ContactResponse => ({ ...r, phone: r.phone ?? undefined, topic: r.topic ?? undefined, createdAt: r.createdAt.toISOString() });
 
-const COLUMNS = `id, name, email, phone, message, handled, created_at AS "createdAt"`;
+const COLUMNS = `id, name, email, phone, topic, message, handled, created_at AS "createdAt"`;
 
 /** Formulario de contacto de la página pública: se guarda y se avisa a los administradores. */
 export const createContactMessage = async (input: ContactRequest): Promise<ContactResponse> => {
   const { rows } = await db.query<ContactRow>(
-    `INSERT INTO contact_messages (name, email, phone, message) VALUES ($1, $2, $3, $4) RETURNING ${COLUMNS}`,
-    [input.name, input.email, input.phone ?? null, input.message],
+    `INSERT INTO contact_messages (name, email, phone, topic, message) VALUES ($1, $2, $3, $4, $5) RETURNING ${COLUMNS}`,
+    [input.name, input.email ?? null, input.phone ?? null, input.topic ?? null, input.message],
   );
   onContactReceived(input.name);
   return toResponse(rows[0] as ContactRow);
