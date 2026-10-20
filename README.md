@@ -22,7 +22,7 @@ cartera, proveedores, usuarios y roles, auditoría, reportes gerenciales y el mo
 ampliación del local. Lo consume la aplicación web
 [`mi-tierrita-app`](https://github.com/kariredondos2002/mi-tierrita-app).
 
-![Mapa vivo del negocio en la aplicación](docs/capturas/02-tablero-mapa.png)
+![Tablero gerencial de la aplicación](docs/capturas/02-tablero.png)
 
 ---
 
@@ -61,10 +61,13 @@ núcleo del SIG: guarda la operación diaria con sus reglas (FEFO, cupo de créd
 en reportes y calcula los indicadores de la inversión (VPN, TIR, cobertura de la cuota, sensibilidad).
 
 Desde la versión 4 la API también es un servidor **Socket.io**: el equipo (administración, caja y bodega) conversa
-en un canal general y en privados con historial, «está escribiendo…», confirmación de lectura y presencia; los
-eventos del negocio (ventas, abonos, compras, stock bajo, escenarios, contactos) llegan como notificaciones en vivo,
-y cualquier cambio refresca las pantallas abiertas de los demás sin recargar. La página pública de inicio guarda los
-mensajes de su formulario de contacto.
+en un canal general y en privados con historial, «está escribiendo…» y presencia; los eventos del negocio (ventas,
+abonos, compras, stock bajo, escenarios, contactos) llegan como notificaciones en vivo, y cualquier cambio refresca las
+pantallas abiertas de los demás sin recargar. Desde la **v4.5** el chat guarda recibos por persona (enviado, entregado,
+visto; el detalle lo ve solo el autor), citas, hilos, fijados, menciones, adjuntos y audio, sin duplicar mensajes gracias
+a `clientId`. La API también aloja a **Tita**, un asistente con IA opcional (Claude, de Anthropic) que consulta datos
+del negocio y prepara borradores que la persona confirma. La página pública de inicio guarda los mensajes de su
+formulario de contacto. Los reportes en PDF y Excel (v4.2 y v4.4) se generan en el servidor y quedan auditados.
 
 Implementa la documentación técnica del TCC: arquitectura del backend (01), requisitos (03), casos de uso (04),
 modelo de datos (05), diseño de la API (06) e infraestructura del backend (08).
@@ -131,7 +134,7 @@ sensibilidad univariada y bivariada y diagrama de tornado.
 | Auditoría | Toda escritura exitosa con usuario, método, recurso y fecha; además cada reporte descargado (`EXPORT`) y cada inicio de sesión (`SIGNIN`) con su detalle | RF-09 · CU-18 |
 | Reportes | Ventas por periodo, inventario por vencer y bajo mínimo, cartera | RF-08 · CU-19, CU-20 |
 | Reportes en PDF y Excel (v4.2) | Ventas, inventario, cartera y evaluación financiera en **PDF con gráficos** (barras, torta, tornado, indicadores) o **Excel con hojas formateadas**; el encabezado dice quién lo generó y cuándo, y la descarga queda en la auditoría | `/reports/*/export` |
-| Chat del equipo (v4) | Canal general y privados, historial paginado, «está escribiendo…», doble check de lectura, presencia y última conexión, respaldo REST | Socket.io |
+| Chat del equipo (v4 · v4.5) | Canal general y privados, historial paginado, «está escribiendo…», presencia y última conexión, respaldo REST. **v4.5:** recibos por persona (el detalle es solo del autor), citas, hilos, responder en privado, fijados, @menciones, adjuntos (6 MB), audio, búsqueda, no leídos y `clientId` contra duplicados | Socket.io · `/chat/*` |
 | Notificaciones (v4) | Venta, anulación, abono, compra o lote, stock bajo (≤ 5), nuevo escenario y nuevo contacto; guardadas y empujadas en vivo | Socket.io |
 | Actualización en vivo (v4) | `datos:cambio` tras cada escritura: las demás pestañas refrescan solo lo que cambió | Socket.io |
 | Búsqueda global (v4) | Productos, clientes, proveedores, ventas y personas según el rol (Ctrl + K) | `GET /search` |
@@ -161,6 +164,8 @@ sensibilidad univariada y bivariada y diagrama de tornado.
 | Auditoría | ✔ | — | — |
 | Chat, notificaciones, búsqueda y perfil propio | ✔ | ✔ | ✔ |
 | Bandeja de contactos del sitio | ✔ | — | — |
+| Tita: resumen, conversación y borradores | ✔ | ✔ (según sus permisos) | ✔ (según sus permisos) |
+| Tita: leer una factura de compra | ✔ | — | ✔ |
 
 Un rol sin permiso recibe **403** con el código 613 y los roles requeridos.
 
@@ -182,7 +187,7 @@ Un rol sin permiso recibe **403** con el código 613 y los roles requeridos.
                                     |
 +-----------------------------------v-------------------------------------+
 |  business-logic/  reglas del dominio y SQL, un archivo por operación     |
-|                   (sales/register.ts aplica FEFO, cupo y factura)        |
+|                   (sales/register-sale.ts aplica FEFO, cupo y factura)        |
 +-----------------------------------+-------------------------------------+
                                     |
 +-----------------------------------v-------------------------------------+
@@ -209,7 +214,7 @@ Un rol sin permiso recibe **403** con el código 613 y los roles requeridos.
 POST /sales  (token de la Secretaria)
   → authenticate → authorize(ADMIN, SALES)
   → controller: parseRegisterSale(body)      cantidades y producto; el precio y el total del cliente se ignoran
-  → business-logic/sales/register.ts
+  → business-logic/sales/register-sale.ts
        BEGIN
        SELECT cliente FOR UPDATE              ¿activo? ¿saldo + total ≤ cupo?  si no → 621
        SELECT producto FOR UPDATE             ¿activo? ¿stock suficiente?      si no → 620
@@ -254,6 +259,7 @@ en [FigJam](https://www.figma.com/board/aPQbmmGEGvT4ScW7g9Y7h9), D01–D40.
 | jsonwebtoken · bcryptjs | 9 · 3 | Tokens y contraseñas |
 | helmet · cors · express-rate-limit | 8 · 2 · 8 | Cabeceras seguras, orígenes permitidos, límite de intentos |
 | socket.io | 4.8 | Chat, presencia, notificaciones y actualización en vivo |
+| @anthropic-ai/sdk | 0.131 | Cliente de Claude para Tita (opcional, v4.5) |
 | pdfkit · exceljs | 0.17 · 4 | Reportes en PDF con gráficos vectoriales y libros de Excel (v4.2) |
 | swagger-ui-express | 5 | Documentación interactiva en `/docs` |
 | tsx | 4 | Desarrollo con recarga y scripts |
@@ -271,7 +277,7 @@ mi-tierrita-api/
 │   ├── routes/            un archivo por entidad (cableado + roles)
 │   ├── controllers/       un archivo por operación
 │   ├── business-logic/    reglas y SQL por entidad (sales, customers, financial/engine.ts, chat,
-│   │                      notifications, search, contact, exports/ = PDF y Excel…)
+│   │                      notifications, search, contact, ai/ = Tita, exports/ = PDF y Excel…)
 │   ├── models/            tipos, parseX y toXResponse (realtime.ts: chat, notificaciones, contacto)
 │   ├── sockets/           index (JWT + salas) · chat-handler · presence · emitter
 │   ├── data-sources/      pool, transacciones, errores de PostgreSQL
@@ -666,6 +672,7 @@ a un mensaje claro.
 | 622 | La venta ya estaba anulada | 409 |
 | 623 | Abono mayor al saldo de cartera | 409 |
 | 625 | Producto inactivo | 409 |
+| 608 | Mensaje de contacto no encontrado | 404 |
 | 626 | Cliente inactivo | 409 |
 | 630 | Recurso duplicado | 409 |
 | 631 | Categoría con productos asociados | 409 |
@@ -685,6 +692,7 @@ a un mensaje claro.
 | Sesión | JWT HS256 con vencimiento y versión de token (cerrar sesión o cambiar la contraseña invalida los anteriores) |
 | Autorización | Toda ruta nace protegida; `authorize(...)` por rol según el documento 06; identidad solo desde el token |
 | Fuerza bruta | 10 intentos de inicio de sesión cada 15 minutos por IP (429 · 640) |
+| Límite de Tita | Las rutas `/ai/*` aceptan 40 solicitudes cada 5 minutos por persona (429); la clave de Anthropic vive solo en el servidor |
 | Cabeceras y orígenes | helmet y CORS solo para `CORS_ORIGINS` |
 | Entrada | Validación de cada DTO; cuerpo JSON de máximo 1 MB; SQL siempre parametrizado |
 | Cálculos | Totales e indicadores enviados por el cliente se ignoran y se recalculan |

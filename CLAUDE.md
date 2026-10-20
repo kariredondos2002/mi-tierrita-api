@@ -57,3 +57,10 @@ No inventar endpoints ni tablas que no estén ahí sin dejarlo escrito en el REA
     (`forAudience` anula `receipts` para los demás). Todo envío pasa por `business-logic/chat/deliver.ts#sendMessage`
     (REST y Socket.io comparten la misma ruta), con `clientId` para no duplicar. Los adjuntos y el audio se
     descargan solo si la persona puede ver el mensaje (`readAttachment`). Prueba con base real: `tests/chat-avanzado.test.ts`.
+
+## Tita (v4.5)
+
+17. **Tita es opcional y solo propone**: sin `ANTHROPIC_API_KEY` las rutas `/ai/*` responden error 660 y la app
+    oculta el panel. La lógica vive en `business-logic/ai/`; un borrador (venta, abono, compra) nunca se guarda solo: la
+    persona lo confirma y pasa por la ruta normal de su módulo, con su `authorize` y su auditoría. Las rutas llevan
+    `aiLimiter` (40 solicitudes por 5 min por usuario). Nunca enviar contraseñas ni datos fuera de lo que el rol puede ver.
