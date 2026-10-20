@@ -22,7 +22,7 @@ cartera, proveedores, usuarios y roles, auditoría, reportes gerenciales y el mo
 ampliación del local. Lo consume la aplicación web
 [`mi-tierrita-app`](https://github.com/kariredondos2002/mi-tierrita-app).
 
-![Tablero gerencial de la aplicación](docs/capturas/02-tablero.png?v=20261021)
+![Tablero gerencial de la aplicación](docs/capturas/02-tablero.png?v=20261022)
 
 ---
 
