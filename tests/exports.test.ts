@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { barChart, createPdf, donut, finish, fitText, header, hbarChart, kpis, money, moneyShort, sectionTitle, table } from "../src/business-logic/exports/pdf-theme";
+import { barChart, composeBlocks, createPdf, donut, emptyState, finish, findings, fitText, header, hbarChart, kpis, lineChart, money, moneyShort, NA, ND, orND, pct, ratio, runBlocks, sectionTitle, summaryBox, table } from "../src/business-logic/exports/pdf-theme";
 
 /** v4.2: el tema de los PDF produce un documento válido con encabezado, gráficos, tabla y pie. */
 test("createPdf arma un PDF válido con gráficos y varias páginas", async () => {
@@ -29,4 +29,47 @@ test("formatos de dinero y recorte de texto", () => {
   assert.ok(doc.widthOfString(cut) <= 60);
   assert.equal(fitText(doc, "corto", 60), "corto");
   doc.end();
+});
+
+/** v4.4: integridad de datos y plantilla común. */
+test("cero, no disponible y no aplica se distinguen", () => {
+  assert.equal(pct(null), ND);
+  assert.match(pct(0), /^0 %$/);
+  assert.equal(ratio(null), ND);
+  assert.equal(orND(null, money), ND);
+  assert.equal(orND(0, money), "$ 0");
+  assert.notEqual(ND, NA);
+});
+
+test("los bloques se pueden ocultar, reordenar y omitir según los datos", () => {
+  const seen: string[] = [];
+  const mk = (id: string, when?: boolean) => ({ id, when, render: () => void seen.push(id) });
+  const blocks = [mk("a"), mk("b", false), mk("c"), mk("d")];
+  assert.deepEqual(composeBlocks(blocks).map((b) => b.id), ["a", "c", "d"]);
+  assert.deepEqual(composeBlocks(blocks, { hide: ["c"] }).map((b) => b.id), ["a", "d"]);
+  assert.deepEqual(composeBlocks(blocks, { order: ["d", "a"] }).map((b) => b.id), ["d", "a", "c"]);
+  runBlocks(blocks, { order: ["c"] });
+  assert.deepEqual(seen, ["c", "a", "d"]);
+});
+
+test("PDF con estados vacíos, negativos, hallazgos, totales y etiquetas", async () => {
+  const { doc, done } = createPdf("Vacío");
+  header(doc, "Reporte", "Sub", { name: "Ana", username: "ana" }, new Date("2026-10-09T15:00:00Z"), { period: "01/09/2026 – 30/09/2026", context: "Prueba" });
+  summaryBox(doc, ["Una línea de resumen.", "Otra línea."]);
+  kpis(doc, [{ label: "Sin dato", value: ND }, { label: "Cero", value: money(0) }, { label: "No aplica", value: NA }]);
+  barChart(doc, [], { title: "Sin datos" });
+  barChart(doc, [{ label: "A0", value: -50 }, { label: "A1", value: 20 }, { label: "A2", value: 35 }], { title: "Con negativo" });
+  lineChart(doc, [{ label: "1", value: -5 }, { label: "2", value: 4 }]);
+  hbarChart(doc, [{ label: "x", value: 0 }]);
+  donut(doc, [{ label: "x", value: 0 }]);
+  findings(doc, []);
+  findings(doc, [{ tone: "warn", title: "Título", text: "Texto de apoyo con cifras." }]);
+  emptyState(doc, "Nada", "pista");
+  table(doc, [{ title: "A", width: 1 }, { title: "B", width: 1, align: "right" }], [], { empty: "Sin filas" });
+  table(doc, [{ title: "A", width: 1 }, { title: "Estado", width: 1, align: "center" }], Array.from({ length: 120 }, (_, i) => [`F${i}`, i % 2 ? "Vencida" : "Al día"]), { totals: ["Total", NA], tag: (r, c) => (c === 1 ? (r[1] === "Vencida" ? "bad" : "good") : undefined) });
+  finish(doc, "Vacío");
+  const pdf = await done;
+  assert.equal(pdf.subarray(0, 4).toString(), "%PDF");
+  // más de una página: el encabezado de la tabla se repite y el pie numera «Página X de Y»
+  assert.ok(pdf.toString("latin1").match(/\/Type \/Page\b/g)!.length >= 3);
 });
