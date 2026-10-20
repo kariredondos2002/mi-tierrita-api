@@ -35,6 +35,7 @@ Variables de entorno:
 | `JWT_SECRET` | 32 caracteres o más, aleatorio (por ejemplo, el resultado de `openssl rand -hex 32`) |
 | `JWT_EXPIRES_IN` | `8h` |
 | `CORS_ORIGINS` | la URL del sitio estático del paso 3 (se completa después) |
+| `ANTHROPIC_API_KEY` (opcional) | clave de Claude para Tita; sin ella la API responde 660 y la app oculta la IA. No la escriba en el repositorio |
 | `SEED_DEMO` | `true` para la sustentación (siembra 120 días de datos simulados solo si la base está vacía); `false` para un negocio real |
 
 Verificación: `https://<api>/health` responde `{"status":"ok","database":"up"}` y `https://<api>/docs` muestra Swagger.

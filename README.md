@@ -13,8 +13,8 @@
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?logo=postgresql&logoColor=white)
 ![JWT](https://img.shields.io/badge/Auth-JWT%20%2B%20bcrypt-orange)
 ![OpenAPI](https://img.shields.io/badge/OpenAPI-3.1-6BA539?logo=openapiinitiative&logoColor=white)
-![Endpoints](https://img.shields.io/badge/Endpoints-44-informational)
-![Pruebas](https://img.shields.io/badge/Pruebas-22%20pasando-brightgreen)
+![Endpoints](https://img.shields.io/badge/Endpoints-81-informational)
+![Pruebas](https://img.shields.io/badge/Pruebas-53%20pasando%20%C2%B7%202%20omitidas-brightgreen)
 ![Licencia](https://img.shields.io/badge/Licencia-Académica-lightgrey)
 
 Servidor REST de **Mi Tierrita SIG**: inventario con lotes y vencimientos (FEFO), punto de venta, clientes con
@@ -279,9 +279,9 @@ mi-tierrita-api/
 │   └── scripts/           migrate · create-admin · seed-demo
 ├── migrations/            SQL numerado y versionado
 ├── docs/
-│   ├── openapi.yaml       contrato de los 66 endpoints REST
+│   ├── openapi.yaml       contrato de los 81 endpoints REST (incluye chat v4.5 y Tita)
 │   └── DESPLIEGUE.md      guía de Seenode paso a paso
-├── tests/                 37 pruebas
+├── tests/                 55 pruebas (53 pasan, 2 omitidas)
 ├── Dockerfile · docker-compose.yml
 └── .env.example
 ```
@@ -383,7 +383,7 @@ Siga el README de [`mi-tierrita-app`](https://github.com/kariredondos2002/mi-tie
 | `pnpm dev` | Servidor con recarga (`tsx watch`), puerto 4300 |
 | `pnpm build` · `pnpm start` | Compila a `build/` y ejecuta |
 | `pnpm typecheck` | Verificación de tipos |
-| `pnpm test` | Pruebas (no necesitan base de datos) |
+| `pnpm test` | Pruebas (las de chat avanzado usan PostgreSQL real y se omiten si no hay base) |
 | `pnpm db:migrate` · `pnpm db:status` | Aplica o lista las migraciones |
 | `pnpm db:seed` | Siembra los datos de demostración |
 | `pnpm create-admin <usuario> <clave>` | Crea el primer administrador |
@@ -439,6 +439,9 @@ Ningún valor sensible va en el código, en la imagen ni en el repositorio.
 | `users.last_seen_at` (v4) | Última conexión, al cerrar el último socket del usuario |
 | `users.email` · `phone` · `updated_at` (v4.2, migración 0003) | Datos de contacto editables en Mi perfil; correo único sin distinguir mayúsculas |
 | `audits.detail` (v4.2, migración 0003) | Qué reporte se generó, con qué filtros y formato, o desde qué IP se inició sesión |
+| `audits.ai_suggested` (v4.5, migración 0004) | Marca las escrituras que la persona confirmó a partir de un borrador de Tita; quien firma sigue siendo la persona |
+| `messages` ampliada · `message_receipts` · `message_mentions` · `message_attachments` (v4.5, migración 0005) | Tipo de mensaje (texto, audio, archivo), cita, hilo, `client_id` contra duplicados, fijado; recibos por persona (enviado, entregado, visto), menciones y adjuntos de hasta 6 MB |
+| `contact_messages.topic` · `email` opcional (v4.5, migración 0006) | Basta un teléfono o un correo para poder responder; asunto elegido en el formulario |
 
 ### Reglas de integridad
 
@@ -609,7 +612,7 @@ Quién recibe cada notificación:
 
 ---
 
-## Reportes en PDF y Excel y su auditoría (v4.2)
+## Reportes en PDF y Excel y su auditoría (v4.2 y v4.4)
 
 Cada reporte se descarga como **PDF** (por defecto) o **Excel** con `?format=pdf|xlsx`. Los genera el servidor
 (`business-logic/exports/`) con los mismos datos de la pantalla, así que lo que se ve es lo que se imprime.
@@ -620,6 +623,14 @@ Cada reporte se descarga como **PDF** (por defecto) o **Excel** con `?format=pdf
 | Inventario | Indicadores, valor por línea, participación, detalle | Hoja por línea con totales |
 | Cartera | Indicadores, saldo por cliente (vencidos en rojo), detalle | Hoja de clientes con cupo, uso y estado |
 | Escenario financiero | VPN, TIR, cuota, cobertura, veredicto, flujo por año y tornado | Indicadores, flujo y sensibilidad |
+
+**Plantilla común (v4.4).** Todos los PDF salen de `pdf-theme.ts` + `report-pdf.ts`: encabezado institucional con
+periodo, alcance, fecha y autor; resumen ejecutivo; tarjetas de indicadores; gráficos de barras, barras horizontales,
+dona y línea con título y unidad; tablas con encabezado repetido, totales y etiquetas de estado; hallazgos y pendientes
+calculados con los datos; criterios de cálculo y «Página X de Y». Los Excel (`report-xlsx.ts`) usan el mismo lenguaje, con
+totales por fórmula e impresión ajustada. Se distingue **0**, **N/D** (no disponible), **N/A** (no aplica) y
+**Sin registro**; cada reporte es una lista de bloques que se pueden ocultar o reordenar. `report-files.ts` solo
+consulta los datos.
 
 **Auditoría de quién genera cada reporte.** El encabezado del PDF y la primera fila del Excel dicen
 *«Generado por Nombre (@usuario) el 9 de octubre de 2026, 5:10 p. m.»*, y cada descarga guarda una fila en
@@ -697,8 +708,9 @@ pnpm test
 | `token.test.ts` | 2 | Firma y verificación del JWT |
 | `chat-avanzado.test.ts` | 6 | Con PostgreSQL real (se omite sin base): chulitos y detalle por persona, `clientId` sin duplicados, privacidad de privados y búsqueda, citas e hilos, respuesta privada, fijados, menciones, adjuntos y audio |
 | `realtime.test.ts` | 11 | Entradas del chat, contacto y perfil (correo y teléfono); escape de la búsqueda; presencia con varias pestañas; el emisor entrega a la sala correcta con dos clientes Socket.io reales |
-| `exports.test.ts` | 2 | El tema de los PDF produce un documento válido (`%PDF`) con gráficos, tabla de varias páginas y pie; formato de dinero y recorte de etiquetas |
-| **Total** | **37** | ✔ 35 pasan · 2 omitidas sin el archivo del modelo |
+| `exports.test.ts` | 5 | La plantilla común produce PDF válido (`%PDF`) con gráficos, tabla de varias páginas y pie «Página X de Y»; formato de dinero y recorte de etiquetas; estados 0, N/D, N/A y Sin registro; bloques que se pueden ocultar |
+| `ai.test.ts` | 9 | Tita (v4.5): estado sin clave, herramientas de consulta y de acción que no escriben, borradores y cabecera `X-AI-Suggested` |
+| **Total** | **55** | ✔ 53 pasan · 2 omitidas sin el archivo del modelo financiero |
 
 La integración continua (`.github/workflows/ci.yml`) hace typecheck, pruebas, migraciones contra un PostgreSQL
 efímero, build e imagen de contenedor.
@@ -759,7 +771,9 @@ frecuentes en [`docs/DESPLIEGUE.md`](docs/DESPLIEGUE.md).
 | v1.1 · Demostración y despliegue | Sembrado de 120 días con la misma lógica de negocio, `start:seenode`, guía de Seenode | Completado |
 | v1.2 · Apoyo a la experiencia 3D | Sin cambios de esquema (retirada en la v4 a pedido de la autora) | Reemplazado |
 | v4 · Tiempo real y página pública | Socket.io (chat, presencia, notificaciones, `datos:cambio`), búsqueda global, perfil propio, contacto público; migración 0002 | Completado · falta publicar en Seenode |
-| v4.2 · Reportes en PDF y perfil completo | PDF con gráficos y Excel para ventas, inventario, cartera y escenarios; auditoría `EXPORT` y `SIGNIN` con detalle; perfil con correo, teléfono y actividad; migración 0003 | Completado · falta publicar en Seenode |
+| v4.2 · Reportes en PDF y perfil completo | PDF con gráficos y Excel para ventas, inventario, cartera y escenarios; auditoría `EXPORT` y `SIGNIN` con detalle; perfil con correo, teléfono y actividad; migración 0003 | Completado |
+| v4.4 · Reportes con plantilla común | Encabezado institucional, resumen ejecutivo, tarjetas, gráficos con unidad, hallazgos, estados 0 / N/D / N/A / Sin registro, Excel con fórmulas y bloques ocultables | Completado · revisar con datos reales |
+| v4.5 · Chat avanzado, contacto ampliado y Tita | Recibos por persona, hilos, citas, fijados, menciones, adjuntos y audio (migración 0005); contacto con tema, correo opcional y campo trampa (0006); Tita, asistente con IA opcional (`/ai/*`, 0004); 55 pruebas | Completado en `main` · falta publicar en Seenode |
 
 ---
 
