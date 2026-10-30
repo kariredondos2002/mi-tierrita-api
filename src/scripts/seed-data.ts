@@ -405,18 +405,31 @@ export type DemoBatch = {
 export const demoBatchPlan = (anchor: string, products: DemoProduct[], demand: Map<string, number>): DemoBatch[] => {
   const rng = createRng(7);
   const out: DemoBatch[] = [];
-  for (const p of products) {
-    const needed = (demand.get(p.sku) ?? 0) + between(rng, 8, 30);
+  // Productos sin lotes por vencer ni vencidos: los únicos que pueden quedar agotados de verdad (stock 0).
+  const withExtraLots = new Set(products.filter((p) => p.shelfDays <= 365 && p.minQty === 1).map((p) => p.sku));
+  let soldOut = 0;
+  let lastDepleted = -99;
+  products.forEach((p, idx) => {
+    const sold = demand.get(p.sku) ?? 0;
+    const needed = sold + between(rng, 8, 30);
     const supplierTaxId = supplierTaxIdFor(p.category);
     const lots = needed > 40 && rng() < 0.6 ? 2 : 1;
-    const first = lots === 2 ? Math.ceil(needed * 0.6) : needed;
-    const specs = lots === 2 ? [first, needed - first] : [needed];
+    // Tres productos con venta quedan exactamente en cero tras el plan de ventas, para que «agotados» del reporte
+    // de inventario y las alertas de reposición no salgan vacíos. La secuencia aleatoria no cambia.
+    const depleted = lots === 1 && sold >= 5 && !withExtraLots.has(p.sku) && idx - lastDepleted >= 6 && soldOut < 3;
+    if (depleted) {
+      soldOut += 1;
+      lastDepleted = idx;
+    }
+    const total = depleted ? sold : needed;
+    const first = lots === 2 ? Math.ceil(total * 0.6) : total;
+    const specs = lots === 2 ? [first, total - first] : [total];
     specs.forEach((quantity, i) => {
       // Para las aves (vida corta) el lote lejano vence en pocos días pero después de hoy; el resto según su vida útil.
       const days = p.shelfDays <= 30 ? between(rng, 40, 60) : between(rng, Math.min(150, p.shelfDays - 30), p.shelfDays);
       out.push({ sku: p.sku, supplierTaxId, quantity, unitCost: p.purchasePrice, expiresAt: addDaysIso(anchor, days), createdDaysAgo: SALES_DAYS + 10 + i * 15, kind: "far" });
     });
-  }
+  });
   const perishable = products.filter((p) => p.shelfDays <= 365 && p.minQty === 1);
   const soonDays = [3, 3, 3, 10, 10, 10, 25, 25, 25];
   soonDays.forEach((days, i) => {

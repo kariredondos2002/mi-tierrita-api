@@ -18,6 +18,7 @@
     "db:status": "tsx src/scripts/migrate.ts status",
     "db:seed": "tsx src/scripts/seed.ts",
     "db:seed:prod": "node build/scripts/seed.js",
+    "start:seenode": "node build/scripts/migrate.js apply && node build/scripts/seed.js && node build/server/index.js",
     "create-admin": "tsx src/scripts/create-admin.ts",
     "vapid": "tsx src/scripts/vapid.ts"
   },
