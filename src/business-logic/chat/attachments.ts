@@ -1,41 +1,37 @@
-import { db } from "../../data-sources/index";
 import { ErrorCodes, domainError } from "../../common/index";
-import { ATTACHMENT_MAX_BYTES, ATTACHMENT_MIME, type AttachmentInfo } from "../../models/index";
-import { canSee } from "./messages";
+import { db } from "../../data-sources/index";
+import type { ChatAttachmentInfo, UploadChatAttachmentRequest } from "../../models/index";
+import { canSee } from "./shared";
 
-const cleanName = (name: string): string =>
-  name.replace(/[\\/\u0000-\u001f"<>|?*:]/g, "_").replace(/\s+/g, " ").trim().slice(0, 120) || "archivo";
+/** Máximo de adjuntos subidos y aún sin enviar por persona (evita llenar la base con archivos huérfanos). */
+const PENDING_MAX = 20;
 
-/**
- * Sube un archivo o un audio. Queda «huérfano» (sin mensaje) hasta que se envía el mensaje que lo usa; el subidor es el único
- * que puede adjuntarlo. Los huérfanos de más de un día se borran. Tipos permitidos y límite de 6 MB (models/realtime.ts).
- */
-export const saveAttachment = async (uploaderId: number, fileName: string, mimeType: string, data: Buffer, durationMs: number | null): Promise<AttachmentInfo> => {
-  if (data.length === 0 || data.length > ATTACHMENT_MAX_BYTES) {
-    throw domainError(ErrorCodes.VALIDATION, [{ path: "file", message: `El archivo debe pesar entre 1 byte y ${ATTACHMENT_MAX_BYTES / 1024 / 1024} MB` }]);
-  }
-  if (!ATTACHMENT_MIME.test(mimeType)) throw domainError(ErrorCodes.VALIDATION, [{ path: "file", message: "Tipo de archivo no permitido" }]);
-  const mime = mimeType.split(";")[0]?.trim().toLowerCase() ?? mimeType;
-  const duration = durationMs !== null && Number.isInteger(durationMs) && durationMs > 0 && durationMs < 3_600_000 ? durationMs : null;
-  await db.query(`DELETE FROM message_attachments WHERE message_id IS NULL AND created_at < now() - interval '1 day'`);
-  const { rows } = await db.query<AttachmentInfo>(
-    `INSERT INTO message_attachments (uploader_id, file_name, mime_type, size_bytes, duration_ms, data) VALUES ($1, $2, $3, $4, $5, $6)
-     RETURNING id, file_name AS "fileName", mime_type AS "mimeType", size_bytes AS "sizeBytes", duration_ms AS "durationMs"`,
-    [uploaderId, cleanName(fileName), mime, data.length, duration, data],
+/** Sube un adjunto; queda a nombre de quien lo sube y sin mensaje hasta que lo envíe. */
+export const uploadChatAttachment = async (userId: number, file: UploadChatAttachmentRequest): Promise<ChatAttachmentInfo> => {
+  await db.query(`DELETE FROM chat_attachments WHERE message_id IS NULL AND created_at < now() - interval '1 day'`);
+  const { rows: pending } = await db.query<{ n: number }>(`SELECT count(*)::int AS n FROM chat_attachments WHERE user_id = $1 AND message_id IS NULL`, [userId]);
+  if ((pending[0]?.n ?? 0) >= PENDING_MAX) throw domainError(ErrorCodes.VALIDATION, [{ path: "file", message: "Tiene demasiados archivos sin enviar; envíe o quite alguno" }]);
+  const { rows } = await db.query<ChatAttachmentInfo>(
+    `INSERT INTO chat_attachments (user_id, name, mime, size, data, duration_ms) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, name, mime, size, duration_ms AS "durationMs"`,
+    [userId, file.name, file.mime, file.data.length, file.data, file.durationMs],
   );
-  return rows[0] as AttachmentInfo;
+  return rows[0]!;
 };
 
-/** Descarga con permisos: el adjunto de un mensaje lo ve quien ve el mensaje; el huérfano, solo quien lo subió. */
-export const readAttachment = async (id: number, viewerId: number): Promise<{ fileName: string; mimeType: string; data: Buffer }> => {
-  const { rows } = await db.query<{ fileName: string; mimeType: string; data: Buffer; uploaderId: number; messageId: number | null; senderId: number | null; recipientId: number | null }>(
-    `SELECT a.file_name AS "fileName", a.mime_type AS "mimeType", a.data, a.uploader_id AS "uploaderId", a.message_id AS "messageId",
-            m.sender_id AS "senderId", m.recipient_id AS "recipientId"
-     FROM message_attachments a LEFT JOIN messages m ON m.id = a.message_id WHERE a.id = $1`,
+/**
+ * Descarga un adjunto si la persona puede ver el mensaje que lo lleva (o si es suyo y aún no lo envía). Si no, 609:
+ * no se revela que exista un archivo de un privado ajeno.
+ */
+export const getChatAttachment = async (userId: number, id: number): Promise<ChatAttachmentInfo & { data: Buffer }> => {
+  const { rows } = await db.query<ChatAttachmentInfo & { data: Buffer; ownerId: number; messageUserId: number | null; recipientId: number | null; messageId: number | null }>(
+    `SELECT a.id, a.name, a.mime, a.size, a.duration_ms AS "durationMs", a.data, a.user_id AS "ownerId", a.message_id AS "messageId",
+            m.user_id AS "messageUserId", m.recipient_id AS "recipientId"
+     FROM chat_attachments a LEFT JOIN chat_messages m ON m.id = a.message_id
+     WHERE a.id = $1`,
     [id],
   );
   const a = rows[0];
-  const allowed = a !== undefined && (a.messageId === null ? a.uploaderId === viewerId : canSee({ senderId: a.senderId as number, recipientId: a.recipientId }, viewerId));
-  if (a === undefined || !allowed) throw domainError(ErrorCodes.MESSAGE_NOT_FOUND);
-  return { fileName: a.fileName, mimeType: a.mimeType, data: a.data };
+  const allowed = a !== undefined && (a.messageId === null ? a.ownerId === userId : canSee(userId, { userId: a.messageUserId!, recipientId: a.recipientId }));
+  if (!allowed) throw domainError(ErrorCodes.CHAT_MESSAGE_NOT_FOUND);
+  return { id: a.id, name: a.name, mime: a.mime, size: a.size, durationMs: a.durationMs, data: a.data };
 };

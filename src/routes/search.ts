@@ -1,5 +1,6 @@
 import { Router } from "express";
-import { searchController } from "../controllers/search/index";
+import { authorize, ALL_ROLES } from "../security/index";
+import { globalSearchController } from "../controllers/search/index";
 
 export const searchRouter = Router();
-searchRouter.get("/", searchController);
+searchRouter.get("/", authorize(...ALL_ROLES), globalSearchController);

@@ -23,8 +23,6 @@ No inventar endpoints ni tablas que no estén ahí sin dejarlo escrito en el REA
 3. **Errores solo por código**: `throw domainError(ErrorCodes.X)`; nuevos códigos se agregan a
    `common/errors.ts` y a la tabla del README. Nunca `res.status(...).json({ message: "texto libre" })`.
 4. **Auditoría intocable**: la registra el middleware; nunca duplicarla en rutas ni loguear contraseñas.
-   Únicas excepciones (v4.2), porque son lecturas: la descarga de un reporte (`AuditMethods.EXPORT`, en
-   `controllers/exports`) y el inicio de sesión (`AuditMethods.SIGNIN`), ambos con `detail` legible.
 5. **Esquema solo por migraciones** numeradas en `migrations/` con encabezado "qué cambia / por qué".
    Una migración aplicada no se edita.
 6. **Dinero de negocio en `DECIMAL(12,2)`**; el módulo financiero usa `DOUBLE PRECISION`. Los totales
@@ -35,32 +33,3 @@ No inventar endpoints ni tablas que no estén ahí sin dejarlo escrito en el REA
 9. Sin clases en dominio: funciones flecha exportadas. Copiar el módulo `categories` antes que inventar.
    Orden de rutas: las fijas (`/me/password`, `/scenarios/compare`) van antes que las de `/:id`.
 10. Cada módulo nuevo actualiza `docs/openapi.yaml` y la tabla "Estado de la API" del README.
-
-## Tiempo real (v4)
-
-11. **Socket.io vive en `src/sockets/`**: `index.ts` autentica con el mismo JWT y une a las salas `canal:general`,
-    `usuario:<id>` y `rol:<ROL>`; `chat-handler.ts` define los eventos; `presence.ts` lleva quién está en línea.
-    La lógica de negocio **nunca importa Socket.io**: emite con `sockets/emitter.ts` (`emitToAll`, `emitToUsers`,
-    `emitToRoles`), que no hace nada si no hay servidor (pruebas y scripts).
-12. Un evento nuevo de negocio se agrega en `business-logic/notifications/business-events.ts` y se llama desde el
-    controlador **después** de que la operación quedó guardada; una falla al notificar se registra y no tumba la respuesta.
-13. Toda escritura exitosa de un recurso de `LIVE_RESOURCES` emite `datos:cambio` (middleware `server/live-events.ts`).
-14. El contrato de eventos está en el README («Eventos Socket.io»): cambiar un nombre o una carga útil exige
-    actualizar la aplicación (`src/realtime/`) y el README en el mismo commit.
-
-## Reportes (v4.2)
-
-15. Los PDF y Excel se arman en `business-logic/exports/` con `pdf-theme.ts` (colores «Verde pastel», encabezado
-    con «Generado por», gráficos vectoriales, tabla y pie «Página n de N»). Un reporte nuevo reutiliza esos
-    helpers y su controlador pasa por `send()` para quedar auditado; nunca generar el PDF en el navegador.
-16. **Chat v4.5**: cada mensaje tiene recibos por persona (`message_receipts`); el autor es el único que ve el detalle
-    (`forAudience` anula `receipts` para los demás). Todo envío pasa por `business-logic/chat/deliver.ts#sendMessage`
-    (REST y Socket.io comparten la misma ruta), con `clientId` para no duplicar. Los adjuntos y el audio se
-    descargan solo si la persona puede ver el mensaje (`readAttachment`). Prueba con base real: `tests/chat-avanzado.test.ts`.
-
-## Tita (v4.5)
-
-17. **Tita es opcional y solo propone**: sin `ANTHROPIC_API_KEY` las rutas `/ai/*` responden error 660 y la app
-    oculta el panel. La lógica vive en `business-logic/ai/`; un borrador (venta, abono, compra) nunca se guarda solo: la
-    persona lo confirma y pasa por la ruta normal de su módulo, con su `authorize` y su auditoría. Las rutas llevan
-    `aiLimiter` (40 solicitudes por 5 min por usuario). Nunca enviar contraseñas ni datos fuera de lo que el rol puede ver.

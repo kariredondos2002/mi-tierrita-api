@@ -1,43 +1,47 @@
-import express, { Router } from "express";
-import { ATTACHMENT_MAX_BYTES } from "../models/index";
+import { Router } from "express";
+import { authorize, ALL_ROLES } from "../security/index";
 import {
-  conversationsController,
-  directoryController,
-  downloadAttachmentController,
-  generalHistoryController,
-  onlineController,
-  pinController,
-  pinnedController,
-  privateHistoryController,
-  readGeneralController,
-  readPrivateController,
-  receiptsController,
-  searchController,
-  sendGeneralController,
-  sendMessageController,
-  sendPrivateController,
-  threadController,
-  unreadController,
-  uploadAttachmentController,
+  chatMessageReceiptsController,
+  chatMessagesStateController,
+  chatStreamController,
+  chatTeamController,
+  createChatMessageController,
+  deleteChatMessageController,
+  editChatMessageController,
+  getChatAttachmentController,
+  listChatMediaController,
+  listChatMessagesController,
+  listChatPinsController,
+  markChatPlayedController,
+  markChatReadController,
+  pinChatMessageController,
+  searchChatMessagesController,
+  unpinChatMessageController,
+  uploadChatAttachmentController,
+  setChatTitaActionController,
 } from "../controllers/chat/index";
 
-/** Chat del equipo: todos los roles autenticados. El envío normal va por Socket.io; estas rutas son historial y respaldo. */
+/**
+ * Chat del equipo: los tres roles leen y escriben en el canal general y en sus privados. La privacidad (quién ve qué
+ * mensaje, adjunto o acuse) y el permiso de fijar en el canal general (ADMIN) se aplican en la lógica de negocio.
+ */
 export const chatRouter = Router();
-chatRouter.get("/general", generalHistoryController);
-chatRouter.post("/general", sendGeneralController);
-chatRouter.post("/general/read", readGeneralController);
-chatRouter.post("/messages", sendMessageController);
-chatRouter.get("/messages/:id/receipts", receiptsController);
-chatRouter.get("/messages/:id/thread", threadController);
-chatRouter.put("/messages/:id/pin", pinController);
-chatRouter.get("/pinned", pinnedController);
-chatRouter.get("/search", searchController);
-chatRouter.post("/attachments", express.raw({ type: () => true, limit: ATTACHMENT_MAX_BYTES + 1024 }), uploadAttachmentController);
-chatRouter.get("/attachments/:id", downloadAttachmentController);
-chatRouter.get("/conversations", conversationsController);
-chatRouter.get("/people", directoryController);
-chatRouter.get("/online", onlineController);
-chatRouter.get("/unread", unreadController);
-chatRouter.get("/private/:userId", privateHistoryController);
-chatRouter.post("/private/:userId", sendPrivateController);
-chatRouter.post("/private/:userId/read", readPrivateController);
+chatRouter.use(authorize(...ALL_ROLES));
+chatRouter.get("/stream", chatStreamController);
+chatRouter.get("/team", chatTeamController);
+chatRouter.get("/search", searchChatMessagesController);
+chatRouter.get("/pins", listChatPinsController);
+chatRouter.get("/media", listChatMediaController);
+chatRouter.post("/read", markChatReadController);
+chatRouter.post("/attachments", uploadChatAttachmentController);
+chatRouter.get("/attachments/:id", getChatAttachmentController);
+chatRouter.get("/messages/state", chatMessagesStateController);
+chatRouter.get("/messages", listChatMessagesController);
+chatRouter.post("/messages", createChatMessageController);
+chatRouter.patch("/messages/:id", editChatMessageController);
+chatRouter.delete("/messages/:id", deleteChatMessageController);
+chatRouter.get("/messages/:id/receipts", chatMessageReceiptsController);
+chatRouter.post("/messages/:id/played", markChatPlayedController);
+chatRouter.patch("/messages/:id/tita-actions", setChatTitaActionController);
+chatRouter.put("/messages/:id/pin", pinChatMessageController);
+chatRouter.delete("/messages/:id/pin", unpinChatMessageController);

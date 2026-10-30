@@ -4,14 +4,17 @@ import { db } from "../../data-sources/index";
 import { Roles, type Role } from "../../security/index";
 import { listCategories } from "../categories/index";
 import { listContactMessages } from "../contact/index";
-import { listDirectory } from "../chat/index";
+import { chatTeam } from "../chat/index";
 import { listProducts, findProductById } from "../products/index";
 import { listExpiringBatches, listProductBatches } from "../batches/index";
 import { getCustomerBalance, listCustomers, findCustomerById } from "../customers/index";
 import { inventoryReport, receivablesReport, salesReport } from "../reports/index";
 import { getSale, listSales } from "../sales/index";
 import { listSuppliers, findSupplierById } from "../suppliers/index";
-import { getScenario, listScenarios } from "../financial/index";
+import { getProject, listProjects } from "../financial/index";
+import { listDueOrders } from "../orders/list-due-orders";
+import { listUpcomingPayroll } from "../payroll/list-upcoming-payroll";
+import { listScheduledCounts } from "../stock-counts/list-scheduled-counts";
 import { computeInsights } from "./insights";
 import { ACTION_TOOLS } from "./actions";
 import { ALL, int, isoDate, obj, page, str, type ToolContext, type ToolDef } from "./tool-kit";
@@ -159,18 +162,23 @@ const READ_TOOLS: Record<string, ToolDef> = {
   },
   escenarios_financieros: {
     roles: [Roles.ADMIN],
-    label: "Finanzas y crédito",
+    label: "Simulador financiero",
     spec: {
       name: "escenarios_financieros",
       description:
-        "Escenarios de evaluación de la ampliación del local con crédito: sin id lista los escenarios con sus indicadores (VPN, TIR, recuperación, cuota); con id da los supuestos y resultados completos.",
+        "Proyectos guardados del simulador financiero (ampliación del local: mercado, competencia, costos, inversión, financiación, flujo de caja y riesgos). Sin id lista los proyectos con VPN, TIR, recuperación, B/C, cuota y cobertura mínima; con id da los supuestos y todas las secciones calculadas, con los escenarios pesimista, base y optimista. Son las mismas cifras de la pantalla de Finanzas y del informe.",
       input_schema: obj({ id: { type: "integer" } }),
     },
-    run: async (i) => {
+    run: async (i, ctx) => {
       const id = int(i["id"]);
-      if (id !== undefined) return getScenario(id);
-      const r = await listScenarios(page(20));
-      return { escenarios: r.items.map((s) => ({ id: s.id, nombre: s.name, inversion: s.fixedInvestment, credito: s.creditPct, plazoMeses: s.termMonths, aumentoVentas: s.salesIncrease, indicadores: s.indicators })) };
+      if (id !== undefined) {
+        const p = await getProject(id);
+        // La tabla mes a mes del crédito no aporta a la respuesta: basta el resumen anual.
+        const { monthly: _monthly, ...financing } = p.result.financing;
+        return { ...p, result: { ...p.result, financing } };
+      }
+      const r = await listProjects(ctx.userId, "all", page(20));
+      return { proyectos: r.items.map((p) => ({ id: p.id, nombre: p.name, dueño: p.username, supuestos: p.highlights, indicadores: p.indicators })) };
     },
   },
   categorias: {
@@ -202,20 +210,66 @@ const READ_TOOLS: Record<string, ToolDef> = {
   contactos_del_sitio: {
     roles: [Roles.ADMIN],
     label: "Contactos del sitio",
-    spec: { name: "contactos_del_sitio", description: "Mensajes del formulario de la página pública (pendientes o todos) con su id.", input_schema: obj({ pendientes: { type: "boolean" } }) },
+    spec: { name: "contactos_del_sitio", description: "Mensajes del formulario de la página pública (nuevos, leídos o archivados) con su id.", input_schema: obj({ estado: { type: "string", enum: ["NEW", "READ", "ARCHIVED"] } }) },
     run: async (i) => {
-      const all = await listContactMessages(50);
-      const list = i["pendientes"] === true ? all.filter((m) => !m.handled) : all;
-      return { mensajes: list.slice(0, 20).map((m) => ({ id: m.id, nombre: m.name, telefono: m.phone ?? null, mensaje: m.message, atendido: m.handled, fecha: m.createdAt })) };
+      const status = i["estado"] === "READ" || i["estado"] === "ARCHIVED" || i["estado"] === "NEW" ? (i["estado"] as "NEW" | "READ" | "ARCHIVED") : undefined;
+      const r = await listContactMessages(page(20), { status });
+      return { mensajes: r.items.map((m) => ({ id: m.id, nombre: m.name, telefono: m.phone, tema: m.topic, mensaje: m.body, estado: m.status, fecha: m.createdAt })) };
     },
   },
   equipo: {
     roles: ALL,
     label: "Equipo",
     spec: { name: "equipo", description: "Personas del equipo con su id, rol y si están en línea (para enviarles un mensaje por el chat del equipo).", input_schema: obj({}) },
-    run: async () => {
-      const members = await listDirectory();
-      return { personas: members.map((m) => ({ id: m.id, nombre: m.name, rol: m.role, enLinea: m.online })) };
+    run: async (_i, ctx) => {
+      const t = await chatTeam(ctx.userId);
+      return { personas: t.members.map((m) => ({ id: m.id, nombre: `${m.firstName} ${m.lastName}`, rol: m.role, enLinea: m.online })) };
+    },
+  },
+  pedidos_abiertos: {
+    roles: ALL,
+    label: "Pedidos",
+    spec: {
+      name: "pedidos_abiertos",
+      description:
+        "Pedidos sin cerrar con fecha de llegada o de entrega dentro de N días, incluidos los atrasados: a proveedores (administración y bodega) y encargos de clientes (administración y caja). Solo vienen los tipos que esta cuenta maneja.",
+      input_schema: obj({ dias: { type: "integer", description: "Ventana en días hacia adelante (1 a 120). Por defecto 30." } }),
+    },
+    run: async (i, ctx) => {
+      const days = Math.min(Math.max(int(i["dias"]) ?? 30, 1), 120);
+      const orders = await listDueOrders(ctx.role, addDaysIso(todayIso(), days));
+      return {
+        total: orders.length,
+        pedidos: orders.map((o) => ({ id: o.id, tipo: o.kind === "SUPPLIER" ? "a proveedor" : "de cliente", con: o.counterpartName, fecha: o.dueDate, estado: o.status, atrasado: o.overdue, diasParaLaFecha: o.daysToDue, unidadesPendientes: o.pendingUnits, total: o.total, enlace: o.href })),
+      };
+    },
+  },
+  nomina_por_pagar: {
+    roles: [Roles.ADMIN],
+    label: "Nómina",
+    spec: {
+      name: "nomina_por_pagar",
+      description: "Periodos de nómina sin pagar (borrador o aprobados) con fecha de pago dentro de N días, incluidos los atrasados, con el neto total calculado por el sistema. Liquidación simplificada: no es nómina electrónica.",
+      input_schema: obj({ dias: { type: "integer", description: "Ventana en días hacia adelante (1 a 120). Por defecto 31." } }),
+    },
+    run: async (i) => {
+      const days = Math.min(Math.max(int(i["dias"]) ?? 31, 1), 120);
+      const periods = await listUpcomingPayroll(addDaysIso(todayIso(), days));
+      return { periodos: periods.map((p) => ({ id: p.id, frecuencia: p.frequency === "MONTHLY" ? "mensual" : "quincenal", desde: p.periodStart, hasta: p.periodEnd, fechaDePago: p.payDate, estado: p.status === "DRAFT" ? "borrador" : "aprobada", netoTotal: p.totalNet, enlace: `/nomina?periodo=${p.id}` })) };
+    },
+  },
+  conteos_programados: {
+    roles: [Roles.ADMIN, Roles.WAREHOUSE],
+    label: "Conteos de inventario",
+    spec: {
+      name: "conteos_programados",
+      description: "Conteos de inventario programados o en curso con fecha dentro de N días, incluidos los atrasados, con su alcance (todo el inventario o una categoría).",
+      input_schema: obj({ dias: { type: "integer", description: "Ventana en días hacia adelante (1 a 120). Por defecto 30." } }),
+    },
+    run: async (i) => {
+      const days = Math.min(Math.max(int(i["dias"]) ?? 30, 1), 120);
+      const counts = await listScheduledCounts(addDaysIso(todayIso(), days));
+      return { conteos: counts.map((c) => ({ id: c.id, titulo: c.title, fecha: c.scheduledDate, estado: c.status === "PLANNED" ? "programado" : "en curso", atrasado: c.overdue, alcance: c.scope === "ALL" ? "todo el inventario" : (c.categoryName ?? "una categoría"), enlace: `/conteos?c=${c.id}` })) };
     },
   },
   recomendaciones: {

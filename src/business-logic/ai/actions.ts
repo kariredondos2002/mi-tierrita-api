@@ -9,10 +9,11 @@ import {
   parseCreateProduct,
   parseCreatePurchase,
   parseCreateSale,
-  parseCreateScenario,
+  parseSaveProject,
   parseCreateSupplier,
-  parseMessageContent,
-  parsePrivateMessage,
+  parseCreateAlarm,
+  parseCreateChatMessage,
+  parseUpdateContactMessage,
   parseUpdateCustomer,
   parseUpdateProduct,
   parseUpdateSupplier,
@@ -375,52 +376,55 @@ export const ACTION_TOOLS: Record<string, ToolDef> = {
   /* ------------------------------------------------------------------ finanzas, contactos y equipo */
   crear_escenario: {
     roles: [Roles.ADMIN],
-    label: "Nuevo escenario",
+    label: "Nuevo proyecto del simulador",
     spec: {
       name: "crear_escenario",
       description:
-        "Prepara un escenario de evaluación de la ampliación con crédito: nombre, inversión fija (pesos), porcentaje financiado (0 a 1), plazo en meses, aumento de ventas (fracción, 0.2 = 20 %), gastos adicionales al mes y si el crédito cubre el capital de trabajo. El servidor calcula VPN, TIR y demás al crearlo.",
+        "Prepara un proyecto del simulador financiero a partir del ejemplo de la ampliación del local, cambiando solo lo que se indique: nombre, parte con crédito (0 a 1), plazo en meses, tasa del crédito EA (fracción), margen sobre el costo (fracción, 0.34 = 34 %), IPC (fracción) y tasa mínima exigida (fracción). El servidor calcula VPN, TIR y demás al guardarlo.",
       input_schema: obj(
-        { name: { type: "string" }, fixedInvestment: { type: "number" }, creditPct: { type: "number" }, termMonths: { type: "integer" }, salesIncrease: { type: "number" }, additionalExpensesMonth: { type: "number" }, creditCoversWorkingCapital: { type: "boolean" } },
-        ["name", "fixedInvestment", "creditPct", "termMonths", "salesIncrease", "additionalExpensesMonth"],
+        { name: { type: "string" }, creditPct: { type: "number" }, termMonths: { type: "integer" }, creditRateEA: { type: "number" }, marginOnCost: { type: "number" }, inflation: { type: "number" }, discountRate: { type: "number" } },
+        ["name"],
       ),
     },
     run: async (i, ctx) => {
-      const body = clean({
-        name: str(i["name"]),
-        fixedInvestment: num(i["fixedInvestment"]),
-        creditPct: num(i["creditPct"]),
-        termMonths: int(i["termMonths"]),
-        salesIncrease: num(i["salesIncrease"]),
-        additionalExpensesMonth: num(i["additionalExpensesMonth"]),
-        creditCoversWorkingCapital: typeof i["creditCoversWorkingCapital"] === "boolean" ? i["creditCoversWorkingCapital"] : undefined,
-      });
-      const v = validate(parseCreateScenario, body);
+      const financing = clean({ creditPct: num(i["creditPct"]), termMonths: int(i["termMonths"]), creditRateEA: num(i["creditRateEA"]) });
+      const costs = clean({ marginOnCost: num(i["marginOnCost"]), inflation: num(i["inflation"]) });
+      const evaluation = clean({ discountRate: num(i["discountRate"]) });
+      const body = { name: str(i["name"]), input: { financing, costs, evaluation } };
+      const v = validate(parseSaveProject, body);
       if (!v.ok) return v.error;
+      const changes = [
+        financing["creditPct"] !== undefined ? `${Math.round(Number(financing["creditPct"]) * 100)} % con crédito` : null,
+        financing["termMonths"] !== undefined ? `plazo ${financing["termMonths"]} meses` : null,
+        financing["creditRateEA"] !== undefined ? `crédito al ${(Number(financing["creditRateEA"]) * 100).toFixed(1)} % EA` : null,
+        costs["marginOnCost"] !== undefined ? `margen sobre el costo ${Math.round(Number(costs["marginOnCost"]) * 100)} %` : null,
+        costs["inflation"] !== undefined ? `IPC ${(Number(costs["inflation"]) * 100).toFixed(1)} %` : null,
+        evaluation["discountRate"] !== undefined ? `tasa mínima ${(Number(evaluation["discountRate"]) * 100).toFixed(1)} %` : null,
+      ].filter((x): x is string => x !== null);
       return propose(ctx, {
         type: "action",
         kind: "scenario",
-        title: `Escenario: ${body["name"]}`,
-        lines: [
-          `Inversión ${money(Number(body["fixedInvestment"]))} · ${Math.round(Number(body["creditPct"]) * 100)} % con crédito a ${body["termMonths"]} meses`,
-          `Ventas +${Math.round(Number(body["salesIncrease"]) * 100)} % · gastos adicionales ${money(Number(body["additionalExpensesMonth"]))} al mes`,
-        ],
+        title: `Proyecto: ${body.name}`,
+        lines: [changes.length > 0 ? `Cambios sobre el ejemplo: ${changes.join(" · ")}` : "Igual al ejemplo de la ampliación del local"],
         warnings: [],
-        confirmLabel: "Crear escenario",
-        request: { method: "POST", path: "/financial/scenarios", body },
+        confirmLabel: "Guardar proyecto",
+        request: { method: "POST", path: "/financial/projects", body },
       });
     },
   },
   actualizar_contacto: {
     roles: [Roles.ADMIN],
     label: "Contacto del sitio",
-    spec: { name: "actualizar_contacto", description: "Prepara el marcado de un mensaje del sitio como atendido.", input_schema: obj({ contactId: { type: "integer" } }, ["contactId"]) },
+    spec: { name: "actualizar_contacto", description: "Prepara el cambio de estado de un mensaje del sitio: READ (atendido) o ARCHIVED.", input_schema: obj({ contactId: { type: "integer" }, status: { type: "string", enum: ["NEW", "READ", "ARCHIVED"] } }, ["contactId", "status"]) },
     run: async (i, ctx) => {
       const id = int(i["contactId"]);
-      if (id === undefined) return { error: "contactId requerido" };
+      const body = clean({ status: str(i["status"]) });
+      const v = validate(parseUpdateContactMessage, body);
+      if (!v.ok || id === undefined) return v.ok ? { error: "contactId requerido" } : v.error;
       const { rows } = await db.query<{ name: string }>(`SELECT name FROM contact_messages WHERE id = $1`, [id]);
       if (!rows[0]) return { error: "Mensaje no encontrado" };
-      return propose(ctx, { type: "action", kind: "contact", title: `Mensaje de ${rows[0].name}`, lines: ["Marcar como atendido"], warnings: [], confirmLabel: "Guardar", request: { method: "POST", path: `/contact/${id}/handled`, body: {} } });
+      const label = body["status"] === "READ" ? "atendido" : body["status"] === "ARCHIVED" ? "archivado" : "por atender";
+      return propose(ctx, { type: "action", kind: "contact", title: `Mensaje de ${rows[0].name}`, lines: [`Marcar como ${label}`], warnings: [], confirmLabel: "Guardar", request: { method: "PATCH", path: `/contact-messages/${id}`, body } });
     },
   },
   enviar_mensaje_equipo: {
@@ -432,17 +436,55 @@ export const ACTION_TOOLS: Record<string, ToolDef> = {
       input_schema: obj({ body: { type: "string" }, recipientId: { type: "integer" } }, ["body"]),
     },
     run: async (i, ctx) => {
-      const recipientId = int(i["recipientId"]);
-      const body = clean({ content: str(i["body"]), recipientId });
-      const v = recipientId === undefined ? validate(parseMessageContent, body) : validate(parsePrivateMessage, body);
+      const body = clean({ body: str(i["body"]), recipientId: int(i["recipientId"]) });
+      const v = validate(parseCreateChatMessage, body);
       if (!v.ok) return v.error;
       let to = "Canal general";
-      if (recipientId !== undefined) {
-        const { rows } = await db.query<{ name: string }>(`SELECT first_name || ' ' || last_name AS name FROM users WHERE id = $1 AND active`, [recipientId]);
+      if (body["recipientId"] !== undefined) {
+        const { rows } = await db.query<{ name: string }>(`SELECT first_name || ' ' || last_name AS name FROM users WHERE id = $1 AND active`, [body["recipientId"]]);
         if (!rows[0]) return { error: "Esa persona no existe o está inactiva" };
         to = `Privado a ${rows[0].name}`;
       }
-      return propose(ctx, { type: "action", kind: "chat", title: "Mensaje al equipo", lines: [to, `«${body["content"]}»`], warnings: [], confirmLabel: "Enviar mensaje", request: recipientId === undefined ? { method: "POST", path: "/chat/general", body: { content: body["content"] } } : { method: "POST", path: `/chat/private/${recipientId}`, body: { content: body["content"] } } });
+      return propose(ctx, { type: "action", kind: "chat", title: "Mensaje al equipo", lines: [to, `«${body["body"]}»`], warnings: [], confirmLabel: "Enviar mensaje", request: { method: "POST", path: "/chat/messages", body } });
+    },
+  },
+
+  /* ------------------------------------------------------------------ alarmas */
+  crear_alarma: {
+    roles: ALL,
+    label: "Alarma",
+    spec: {
+      name: "crear_alarma",
+      description:
+        "Prepara una alarma personal (recordatorio) para quien habla: título, hora HH:MM de Colombia, repetición ONCE (una vez, con date YYYY-MM-DD), DAILY (todos los días), WEEKDAYS (lunes a viernes) o WEEKLY (con weekdays 0=domingo…6=sábado), y el área del sistema a la que debe llevar el aviso. «Mañana a las 8» = ONCE con la fecha de mañana.",
+      input_schema: obj(
+        {
+          title: { type: "string" },
+          description: { type: "string" },
+          timeOfDay: { type: "string", description: "HH:MM en 24 horas" },
+          repeat: { type: "string", enum: ["ONCE", "DAILY", "WEEKDAYS", "WEEKLY"] },
+          weekdays: { type: "array", items: { type: "integer", minimum: 0, maximum: 6 } },
+          date: { type: "string", description: "YYYY-MM-DD, solo para ONCE" },
+          area: { type: "string", enum: ["inicio", "inventario", "lotes", "ventas", "clientes", "proveedores", "finanzas", "reportes", "chat", "alarmas"] },
+        },
+        ["title", "timeOfDay", "repeat"],
+      ),
+    },
+    run: async (i, ctx) => {
+      const weekdays = Array.isArray(i["weekdays"]) ? i["weekdays"].map(int).filter((d): d is number => d !== undefined) : undefined;
+      const body = clean({ title: str(i["title"]), description: str(i["description"]), timeOfDay: str(i["timeOfDay"]), repeat: str(i["repeat"]), weekdays, date: isoDate(i["date"]), area: str(i["area"]) });
+      const v = validate(parseCreateAlarm, body);
+      if (!v.ok) return v.error;
+      const repeatLabel: Record<string, string> = { ONCE: `una sola vez, el ${String(body["date"])}`, DAILY: "todos los días", WEEKDAYS: "de lunes a viernes", WEEKLY: `cada semana (días ${(weekdays ?? []).join(", ")})` };
+      return propose(ctx, {
+        type: "action",
+        kind: "create_alarm",
+        title: `Alarma: ${String(body["title"])}`,
+        lines: [`A las ${String(body["timeOfDay"])} · ${repeatLabel[String(body["repeat"])] ?? ""}`, `Área: ${String(body["area"] ?? "alarmas")}`, ...(body["description"] !== undefined ? [String(body["description"])] : [])],
+        warnings: [],
+        confirmLabel: "Crear alarma",
+        request: { method: "POST", path: "/alarms", body },
+      });
     },
   },
 

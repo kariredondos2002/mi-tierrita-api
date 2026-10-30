@@ -16,25 +16,23 @@
     "db:migrate": "tsx src/scripts/migrate.ts apply",
     "db:migrate:prod": "node build/scripts/migrate.js apply",
     "db:status": "tsx src/scripts/migrate.ts status",
+    "db:seed": "tsx src/scripts/seed.ts",
+    "db:seed:prod": "node build/scripts/seed.js",
     "create-admin": "tsx src/scripts/create-admin.ts",
-    "db:seed": "tsx src/scripts/seed-demo.ts",
-    "db:seed:prod": "node build/scripts/seed-demo.js",
-    "start:seenode": "node build/scripts/migrate.js apply && node build/scripts/seed-demo.js && node build/server/index.js"
+    "vapid": "tsx src/scripts/vapid.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "0.131.0",
     "bcryptjs": "^3.0.2",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
-    "exceljs": "^4.4.0",
     "express": "^5.1.0",
     "express-rate-limit": "^8.1.0",
     "helmet": "^8.1.0",
     "jsonwebtoken": "^9.0.3",
-    "pdfkit": "~0.17.2",
     "pg": "^8.16.3",
-    "socket.io": "^4.8.4",
     "swagger-ui-express": "^5.0.1",
+    "web-push": "^3.6.7",
     "yaml": "^2.8.1"
   },
   "devDependencies": {
@@ -42,10 +40,9 @@
     "@types/express": "^5.0.3",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^22.18.6",
-    "@types/pdfkit": "^0.17.6",
     "@types/pg": "^8.15.5",
     "@types/swagger-ui-express": "^4.1.8",
-    "socket.io-client": "^4.8.4",
+    "@types/web-push": "^3.6.4",
     "tsx": "^4.20.5",
     "typescript": "^5.9.2"
   },

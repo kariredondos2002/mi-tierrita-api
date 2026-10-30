@@ -2,9 +2,9 @@ import { Router } from "express";
 import rateLimit from "express-rate-limit";
 import { ErrorCodes } from "../common/index";
 import { authorize, Roles } from "../security/index";
-import { createContactController, handleContactController, listContactController } from "../controllers/contact/index";
+import { createContactMessageController, listContactMessagesController, updateContactMessageController } from "../controllers/contact/index";
 
-/** El formulario público acepta 5 envíos por hora por IP. */
+/** Un visitante puede dejar pocos mensajes seguidos: más de 5 en una hora desde la misma IP responde 429 (640). */
 const contactLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
   limit: 5,
@@ -13,11 +13,11 @@ const contactLimiter = rateLimit({
   message: { message: ErrorCodes.TOO_MANY_ATTEMPTS },
 });
 
-/** Pública: se monta ANTES de authenticate. */
+/** Ruta pública del formulario de la página pública: se monta ANTES del middleware authenticate. */
 export const contactPublicRouter = Router();
-contactPublicRouter.post("/", contactLimiter, createContactController);
+contactPublicRouter.post("/", contactLimiter, createContactMessageController);
 
-export const contactRouter = Router();
-contactRouter.use(authorize(Roles.ADMIN));
-contactRouter.get("/", listContactController);
-contactRouter.post("/:id/handled", handleContactController);
+/** Bandeja de contactos del sitio (prototipo 12): solo ADMIN. */
+export const contactMessagesRouter = Router();
+contactMessagesRouter.get("/", authorize(Roles.ADMIN), listContactMessagesController);
+contactMessagesRouter.patch("/:id", authorize(Roles.ADMIN), updateContactMessageController);

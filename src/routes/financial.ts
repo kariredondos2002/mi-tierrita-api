@@ -1,6 +1,14 @@
 import { Router } from "express";
 import { authorize, Roles } from "../security/index";
 import {
+  compareProjectsController,
+  deleteProjectController,
+  getProjectController,
+  listProjectsController,
+  saveProjectController,
+  simulatorCalculateController,
+  simulatorDefaultsController,
+  updateProjectController,
   compareScenariosController,
   createScenarioController,
   getScenarioAmortizationController,
@@ -10,7 +18,6 @@ import {
   getScenarioTornadoController,
   listScenariosController,
 } from "../controllers/financial/index";
-import { exportScenarioController } from "../controllers/exports/index";
 
 export const financialRouter = Router();
 financialRouter.use(authorize(Roles.ADMIN));
@@ -22,4 +29,13 @@ financialRouter.get("/scenarios/:id/amortization", getScenarioAmortizationContro
 financialRouter.get("/scenarios/:id/sensitivity", getScenarioSensitivityController);
 financialRouter.get("/scenarios/:id/sensitivity/bivariate", getScenarioBivariateController);
 financialRouter.get("/scenarios/:id/tornado", getScenarioTornadoController);
-financialRouter.get("/scenarios/:id/export", exportScenarioController);
+
+// Simulador por unidades (Fase B): una sola fuente de las cifras de pantalla, informe y exportación.
+financialRouter.get("/simulator/defaults", simulatorDefaultsController);
+financialRouter.post("/simulator/calculate", simulatorCalculateController);
+financialRouter.get("/projects", listProjectsController);
+financialRouter.post("/projects", saveProjectController);
+financialRouter.get("/projects/compare", compareProjectsController); // antes de /:id
+financialRouter.get("/projects/:id", getProjectController);
+financialRouter.put("/projects/:id", updateProjectController);
+financialRouter.delete("/projects/:id", deleteProjectController);
