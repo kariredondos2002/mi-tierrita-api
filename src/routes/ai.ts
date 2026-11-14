@@ -16,7 +16,7 @@ import {
   listConversationsController,
 } from "../controllers/ai/index";
 
-/** Cada llamada al modelo cuesta: tope por persona (no por IP) para las rutas que consultan a Claude. */
+/** Cada llamada al modelo cuesta: tope por persona (no por IP) para las rutas que consultan al modelo de IA. */
 const aiLimiter = rateLimit({
   windowMs: 5 * 60 * 1000,
   limit: 40,
@@ -29,7 +29,7 @@ const aiLimiter = rateLimit({
 });
 
 /**
- * Asistente de IA (Claude). Ninguna ruta escribe datos de negocio: proponen y la persona confirma en la pantalla de
+ * Asistente de IA (modelo de IA de Anthropic). Ninguna ruta escribe datos de negocio: proponen y la persona confirma en la pantalla de
  * cada módulo. Lo único que se guarda es el historial de conversaciones de cada persona.
  */
 /** El autocompletado se pide con cada pausa al escribir: tope propio, más alto y más corto. */

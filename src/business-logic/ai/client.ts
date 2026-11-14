@@ -7,7 +7,7 @@ let client: Anthropic | undefined;
 /** ¿Hay clave de Anthropic configurada? Sin ella la IA queda apagada y la app oculta sus funciones. */
 export const aiEnabled = (): boolean => config.ai.apiKey.trim() !== "";
 
-/** Cliente de Claude (uno por proceso). Lanza 660 si la IA no está configurada. */
+/** Cliente del modelo de IA de Anthropic (uno por proceso). Lanza 660 si la IA no está configurada. */
 export const requireAi = (): Anthropic => {
   if (!aiEnabled()) throw domainError(ErrorCodes.AI_UNAVAILABLE);
   client ??= new Anthropic({ apiKey: config.ai.apiKey, maxRetries: 2, timeout: 60_000 });

@@ -94,7 +94,7 @@ agropecuaria de Sahagún (Córdoba). Reúne en un solo lugar lo que la tienda ll
 inventario con **lotes y vencimientos (FEFO)**, punto de venta, clientes con **cupo y cartera**, proveedores, pedidos,
 conteos de inventario, nómina simplificada, usuarios y roles, auditoría, reportes con folio verificable, el
 **simulador financiero** de la ampliación del local, chat del equipo, alarmas, contactos de la página pública y **Tita**,
-la asistente con IA (Claude, de Anthropic).
+la asistente con IA (modelo de IA de Anthropic).
 
 Este repositorio implementa la documentación técnica del Trabajo Colaborativo Contextualizado: arquitectura del
 backend (01), requisitos (03), casos de uso (04), modelo de datos (05), diseño de la API (06) e infraestructura del
@@ -299,7 +299,7 @@ Ningún valor sensible va en el código ni en la imagen. Ver [.env.example](.env
 | `DB_SSL` | TLS de la conexión: `disable`, `require` o `verify` |
 | `JWT_SECRET` | Firma de los tokens; mínimo 32 caracteres, sin valor por defecto |
 | `JWT_EXPIRES_IN` | Vigencia del token (`8h`) |
-| `ANTHROPIC_API_KEY` | Clave de Claude (Anthropic) para el asistente. Opcional: sin ella las rutas `/ai` responden 660 y la app oculta la IA |
+| `ANTHROPIC_API_KEY` | Clave del modelo de IA de Anthropic para el asistente. Opcional: sin ella las rutas `/ai` responden 660 y la app oculta la IA |
 | `AI_MODEL` / `AI_FAST_MODEL` | Modelo del asistente y de los textos cortos (`claude-sonnet-5-5` / `claude-haiku-5-5`) |
 | `BUSINESS_TZ` | Zona horaria del negocio para "hoy", cortes de reportes y vencimientos (`America/Bogota`) |
 | `CORS_ORIGINS` | Dominios del frontend permitidos, separados por coma |
@@ -713,5 +713,5 @@ Apache-2.0 y Unlicense; todas permiten este uso. El detalle actualizado se obtie
 
 ### Servicios externos
 
-Tita usa la API de Claude de Anthropic cuando hay `ANTHROPIC_API_KEY`. El SDK es MIT; el uso del servicio se rige por
+Tita usa el modelo de IA de Anthropic cuando hay `ANTHROPIC_API_KEY`. El SDK es MIT; el uso del servicio se rige por
 los términos comerciales de Anthropic de la cuenta que aporta la clave, no por la licencia de este repositorio.

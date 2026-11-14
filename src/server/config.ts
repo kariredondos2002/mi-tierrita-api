@@ -72,7 +72,7 @@ export const config = {
   /** Datos de ejemplo al arrancar (brief 2026, punto 39): `SEED_ON_START=true` ejecuta el seed idempotente tras db.ping(). */
   seedOnStart: optional("SEED_ON_START", "false") === "true",
   /**
-   * Asistente de IA (Claude, de Anthropic). Sin ANTHROPIC_API_KEY la API funciona igual y las rutas /ai responden 660;
+   * Asistente de IA (modelo de IA de Anthropic). Sin ANTHROPIC_API_KEY la API funciona igual y las rutas /ai responden 660;
    * la app oculta las funciones de IA. AI_MODEL conversa y usa herramientas; AI_FAST_MODEL redacta textos cortos.
    */
   ai: {
