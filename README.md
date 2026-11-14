@@ -21,7 +21,7 @@ Lo consume la aplicación web [`mi-tierrita-app`](https://github.com/kariredondo
 
 **Demostración:** aplicación web en [mi-tierrita-app-keoc.vercel.app](https://mi-tierrita-app-keoc.vercel.app) (Vercel, datos de ejemplo).
 
-**Enlaces:** [presentación (Figma Slides)](https://www.figma.com/deck/0bH9C8DbFsVHskGEeIQPIW/PRESENTACI%C3%93N-Mi-Tierrita-SIG?node-id=0-20) · [repositorio del cliente](https://github.com/kariredondos2002/mi-tierrita-app) · [contrato OpenAPI](docs/openapi.yaml) · [registro de cambios](CHANGELOG.md)
+**Enlaces:** [presentación (Figma Slides)](https://www.figma.com/deck/0bH9C8DbFsVHskGEeIQPIW/PRESENTACI%C3%93N-Mi-Tierrita-SIG?node-id=0-20) · [repositorio del cliente](https://github.com/kariredondos2002/mi-tierrita-app) · [contrato OpenAPI](docs/openapi.yaml) · [todos los enlaces](docs/ENLACES.md) · [cuentas de prueba](docs/datos-de-prueba.md)
 
 ---
 
@@ -47,7 +47,12 @@ Cuentas para entrar: ver [Datos de ejemplo](#datos-de-ejemplo). La interfaz est�
 | Documento | Contenido |
 |---|---|
 | [Arquitectura y Diseño](#arquitectura-y-diseño) · [API REST](#api-rest) · [Códigos de error](#códigos-de-error) | Capas, contrato de la API y errores (en este README) |
+| [docs/README.md](docs/README.md) | Índice de la documentación y orden de lectura según tu rol |
+| [docs/desarrollo.md](docs/desarrollo.md) | Entorno local, scripts, reglas del código, ramas y definición de «terminado» |
+| [docs/datos-de-prueba.md](docs/datos-de-prueba.md) | Cuentas demo por rol, qué probar con cada una y cómo reiniciar los datos |
+| [docs/DESPLIEGUE.md](docs/DESPLIEGUE.md) | Contenedor, base gestionada, variables y verificación en producción |
 | [docs/openapi.yaml](docs/openapi.yaml) | Contrato OpenAPI 3.1 de todos los endpoints; servido con Swagger UI en `/docs` |
+| [docs/ENLACES.md](docs/ENLACES.md) | Repositorios, demostración, presentación, diseño, manuales por rol (Figma) y diagramas |
 | [migrations/](migrations) | Esquema de la base en SQL numerado (0001 a 0018) |
 | [CHANGELOG.md](CHANGELOG.md) | Historial de cambios |
 | [LICENSE](LICENSE) | Licencia del código |
