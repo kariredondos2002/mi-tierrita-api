@@ -1,112 +1,180 @@
-# Mi Tierrita API
+# UNIVERSIDAD DE CARTAGENA
+## Ingeniería de Software · Sistemas de Información Gerencial (AL17705) · Ingeniería Económica (FC17701)
+### Trabajo Colaborativo Contextualizado · 2026-2
 
-Backend REST de **Mi Tierrita SIG**, el sistema de información gerencial de una agropecuaria en Sahagún, Córdoba:
-inventario con lotes y vencimientos, punto de venta, clientes con cartera, proveedores, usuarios y roles, auditoría,
-reportes, evaluación financiera del proyecto de ampliación, chat del equipo, contactos de la página pública y **Tita**,
-la asistente con IA (Claude, de Anthropic).
+---
 
-Este repositorio implementa la documentación técnica del Trabajo Colaborativo Contextualizado (carpeta
-`6 Documentacion tecnica`): arquitectura del backend (01), requisitos (03), casos de uso (04),
-modelo de datos (05), diseño de la API (06) e infraestructura del backend (08).
+# Mi Tierrita SIG · API
+## Sistema de Información Gerencial y de apoyo a la decisión para Agropecuaria Mi Tierrita
 
-## Stack
+![Node.js](https://img.shields.io/badge/Node.js-22-339933?logo=node.js&logoColor=white)
+![Express](https://img.shields.io/badge/Express-5-000000?logo=express)
+![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?logo=postgresql&logoColor=white)
+![JWT](https://img.shields.io/badge/Auth-JWT%20%2B%20bcrypt-orange)
+![OpenAPI](https://img.shields.io/badge/OpenAPI-3.1-6BA539?logo=openapiinitiative&logoColor=white)
+![Migraciones](https://img.shields.io/badge/Migraciones-0001%E2%80%930018-2F9E5B)
+![Licencia](https://img.shields.io/badge/Licencia-Académica-lightgrey)
 
-| Componente | Tecnología |
-|---|---|
-| Framework HTTP | Express 5 (Node.js 22, TypeScript) |
-| Base de datos | PostgreSQL 16, cliente `pg` directo (sin ORM) |
-| Autenticación | JWT (HS256) + bcrypt |
-| Validación | A mano, con el validador de `common/validate.ts` en cada DTO de entrada |
-| Esquema de base | Migraciones SQL versionadas en `migrations/` |
-| Documentación | OpenAPI 3.1 servido con Swagger UI en `/docs` |
-| Pruebas | `node:test` |
-| IA | SDK oficial de Anthropic (`@anthropic-ai/sdk`), opcional según `ANTHROPIC_API_KEY` |
+Servidor de **Mi Tierrita SIG**: API REST + avisos en tiempo real (Server-Sent Events) + persistencia en PostgreSQL.
+Lo consume la aplicación web [`mi-tierrita-app`](https://github.com/kariredondos2002/mi-tierrita-app).
 
-## Puesta en marcha (local)
+**Demostración:** aplicación web en [mi-tierrita-app-keoc.vercel.app](https://mi-tierrita-app-keoc.vercel.app) (Vercel, datos de ejemplo).
+
+**Enlaces:** [presentación (Figma Slides)](https://www.figma.com/deck/0bH9C8DbFsVHskGEeIQPIW/PRESENTACI%C3%93N-Mi-Tierrita-SIG?node-id=0-20) · [repositorio del cliente](https://github.com/kariredondos2002/mi-tierrita-app) · [contrato OpenAPI](docs/openapi.yaml) · [registro de cambios](CHANGELOG.md)
+
+---
+
+## Arranque rápido
+
+Requisitos: Node.js 22, pnpm y PostgreSQL 16 (o Docker para levantar la base). Detalle en
+[Instalación y Ejecución](#instalación-y-ejecución).
 
 ```bash
 pnpm install
-cp .env.example .env            # ajusta si hace falta
+cp .env.example .env            # completa JWT_SECRET (mínimo 32 caracteres)
 docker compose up -d db         # PostgreSQL 16 en localhost:5433
-pnpm db:migrate                 # aplica migrations/*.sql
-pnpm create-admin admin 'una-clave-segura'
-pnpm db:seed                    # opcional: datos de ejemplo (ver «Datos de ejemplo»)
-pnpm dev                        # http://localhost:4300/api/v1 · docs en /docs
+pnpm db:migrate && pnpm db:seed # esquema y datos de ejemplo
+pnpm dev                        # http://localhost:4300/api/v1 · documentación en /docs
 ```
 
-Comandos:
+Cuentas para entrar: ver [Datos de ejemplo](#datos-de-ejemplo). La interfaz está en
+[`mi-tierrita-app`](https://github.com/kariredondos2002/mi-tierrita-app). Para Tita (la asistente) el servidor necesita
+`ANTHROPIC_API_KEY`; sin ella todo lo demás funciona igual.
 
-| Comando | Qué hace |
+## Documentación
+
+| Documento | Contenido |
 |---|---|
-| `pnpm dev` | Servidor con recarga (`tsx watch`) |
-| `pnpm build` / `pnpm start` | Compila a `build/` y ejecuta |
-| `pnpm typecheck` | `tsc --noEmit` |
-| `pnpm test` | Pruebas unitarias (no necesitan base de datos ni clave de IA) |
-| `pnpm db:migrate` / `pnpm db:status` | Aplica o lista migraciones |
-| `pnpm create-admin <usuario> <clave>` | Crea el primer ADMIN (no hay registro público) |
-| `pnpm db:seed` / `pnpm db:seed:prod` | Datos de ejemplo idempotentes (desde `src/` o desde `build/`) |
-| `RESET_DATA_CONFIRM=<marca> pnpm db:reset` / `pnpm db:reset:prod` | Vacía las tablas de negocio y conserva las cuentas; cada marca sirve una sola vez (ver «Reinicio de datos») |
-| `docker compose up --build` | API + base de datos en contenedores |
+| [Arquitectura y Diseño](#arquitectura-y-diseño) · [API REST](#api-rest) · [Códigos de error](#códigos-de-error) | Capas, contrato de la API y errores (en este README) |
+| [docs/openapi.yaml](docs/openapi.yaml) | Contrato OpenAPI 3.1 de todos los endpoints; servido con Swagger UI en `/docs` |
+| [migrations/](migrations) | Esquema de la base en SQL numerado (0001 a 0018) |
+| [CHANGELOG.md](CHANGELOG.md) | Historial de cambios |
+| [LICENSE](LICENSE) | Licencia del código |
 
-## Variables de entorno
+---
 
-Ningún valor sensible va en el código ni en la imagen. Ver [.env.example](.env.example).
+## Tabla de Contenidos
 
-| Variable | Propósito |
-|---|---|
-| `PORT` | Puerto donde escucha el proceso (4300) |
-| `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD` | Conexión a PostgreSQL en local |
-| `DATABASE_URL` | Cadena única del Postgres gestionado; si está, sustituye a las cinco anteriores |
-| `DB_SSL` | TLS de la conexión: `disable`, `require` o `verify` |
-| `JWT_SECRET` | Firma de los tokens; mínimo 32 caracteres, sin valor por defecto |
-| `JWT_EXPIRES_IN` | Vigencia del token (`8h`) |
-| `ANTHROPIC_API_KEY` | Clave de Claude (Anthropic) para el asistente. Opcional: sin ella las rutas `/ai` responden 660 y la app oculta la IA |
-| `AI_MODEL` / `AI_FAST_MODEL` | Modelo del asistente y de los textos cortos (`claude-sonnet-5-5` / `claude-haiku-5-5`) |
-| `BUSINESS_TZ` | Zona horaria del negocio para "hoy", cortes de reportes y vencimientos (`America/Bogota`) |
-| `CORS_ORIGINS` | Dominios del frontend permitidos, separados por coma |
-| `SEED_ON_START` | Con `true`, la API ejecuta el seed de datos de ejemplo al arrancar (apagado por defecto) |
-| `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` / `VAPID_SUBJECT` | Par Web Push (`pnpm vapid` lo genera) y contacto `mailto:`. Opcionales: sin el par, el push queda apagado (`/push/subscriptions` responde 673) y las alarmas llegan solo por el stream |
+0. [Arranque rápido](#arranque-rápido) · [Documentación](#documentación)
+1. [Descripción](#descripción)
+2. [Marco Teórico](#marco-teórico)
+3. [Funcionalidades](#funcionalidades)
+4. [Roles y Permisos](#roles-y-permisos)
+5. [Arquitectura y Diseño](#arquitectura-y-diseño)
+6. [Tecnologías](#tecnologías)
+7. [Instalación y Ejecución](#instalación-y-ejecución)
+8. [Variables de Entorno](#variables-de-entorno)
+9. [Datos de ejemplo](#datos-de-ejemplo)
+10. [Base de Datos](#base-de-datos)
+11. [API REST](#api-rest)
+12. [Reglas de Negocio](#reglas-de-negocio)
+13. [Códigos de error](#códigos-de-error)
+14. [Seguridad](#seguridad)
+15. [Pruebas](#pruebas)
+16. [Despliegue](#despliegue)
+17. [Solución de Problemas](#solución-de-problemas)
+18. [Decisiones pendientes con el negocio](#decisiones-pendientes-con-el-negocio)
+19. [Fases del Desarrollo](#fases-del-desarrollo)
+20. [Autores](#autores)
+21. [Notas Académicas](#notas-académicas)
+22. [Licencias](#licencias)
 
-## Datos de ejemplo
+---
 
-`pnpm db:seed` (brief de octubre de 2026, punto 39) llena la base con una agropecuaria de Sahagún (Córdoba) usando la
-lógica de negocio real (FEFO, stock, cartera, acuses del chat). Es **idempotente**: cada registro se busca por su clave
-natural (usuario, SKU, NIT, documento, nombre del escenario, `clientId` del mensaje, instante de la venta) y si ya
-existe se deja igual; correrlo dos veces no duplica nada ni toca los datos que no son demo. Tarda unos segundos, no
-necesita red ni `ANTHROPIC_API_KEY`, y al final imprime cuántos registros creó u omitió. Con `SEED_ON_START=true` el
-servidor lo ejecuta al arrancar, después de `db.ping()`.
+## Descripción
 
-### Reinicio de datos
+Backend REST de **Mi Tierrita SIG**, el sistema de información gerencial de **Agropecuaria Mi Tierrita**, una tienda
+agropecuaria de Sahagún (Córdoba). Reúne en un solo lugar lo que la tienda llevaba en cuadernos y hojas sueltas:
+inventario con **lotes y vencimientos (FEFO)**, punto de venta, clientes con **cupo y cartera**, proveedores, pedidos,
+conteos de inventario, nómina simplificada, usuarios y roles, auditoría, reportes con folio verificable, el
+**simulador financiero** de la ampliación del local, chat del equipo, alarmas, contactos de la página pública y **Tita**,
+la asistente con IA (Claude, de Anthropic).
 
-`RESET_DATA_CONFIRM=<marca> pnpm db:reset` (`db:reset:prod` desde `build/`) deja la base lista para volver a sembrar: vacía
-en una sola transacción (`TRUNCATE … RESTART IDENTITY CASCADE`) todas las tablas de negocio del esquema `public` y conserva
-`users`, `roles`, `schema_migrations` y `data_resets`; si el número de usuarios cambiara, se deshace. Sin la variable no hace
-nada, y cada marca se anota en `data_resets` y **solo sirve una vez**: un arranque repetido con la misma variable no vuelve a
-borrar. Se escribió el 9/11/2026 para sacar de producción el conjunto de prueba de la etapa anterior (colmado) antes de correr
-`pnpm db:seed:prod`; en el servidor se ejecuta una sola vez poniendo la variable y `pnpm db:reset:prod && pnpm db:seed:prod`
-delante de `pnpm start`, y después se quitan ambos.
+Este repositorio implementa la documentación técnica del Trabajo Colaborativo Contextualizado: arquitectura del
+backend (01), requisitos (03), casos de uso (04), modelo de datos (05), diseño de la API (06) e infraestructura del
+backend (08). Sustenta dos trabajos del semestre: **Sistemas de Información Gerencial** (ERP + BI + DSS para la gerencia)
+e **Ingeniería Económica** (evaluación con VPN, TIR y sensibilidad de financiar con crédito la ampliación).
 
-Qué crea y cómo se reconoce (sin columnas nuevas):
+---
 
-| Datos | Cantidad | Marca |
+## Marco Teórico
+
+### Sistema de información gerencial (ERP + BI + DSS)
+
+| Capa | Qué resuelve en Mi Tierrita | Dónde vive |
 |---|---|---|
-| Usuarios `demo.admin` (ADMIN), `demo.caja` (SALES), `demo.bodega` (WAREHOUSE) | 3 | usuario `demo.*`; clave de los tres: `Demo-2026` |
-| Líneas de la página pública (Alimentos balanceados, Medicina veterinaria, Semillas y fertilizantes, Aves de corral, Productos agroquímicos, Ferretería agrícola) con descripción y subfamilias | 6 | por `code` 01…06, o por nombre si la base es anterior a la migración 0018 (entonces se les completa el código) |
-| Productos con precios de compra y venta | 56 | SKU `DEMO-XXX-NNN` |
-| Proveedores | 5 | NIT `DEMO-…` |
-| Lotes: lejanos (cubren las ventas), por vencer en 3, 10 y 25 días y ya vencidos | ~78 | producto `DEMO-…` |
-| Clientes con cupo: al día, con cartera vencida, con cupo agotado y solo de contado | 28 | documento `DEMO-…` |
-| Ventas de contado y a crédito de los últimos 120 días, con anulaciones y abonos | ~180 ventas, ~6 anuladas, ~50 abonos | registradas por `demo.*` |
-| Escenarios financieros | 3 | nombre `[Demo] …` |
-| Chat del equipo: canal general con hilo, cita y fijado; privados; adjuntos reales (PNG, PDF y CSV generados por el script y guardados en `chat_attachments`) | 34 mensajes, 3 adjuntos | autor `demo.*` |
-| Mensajes de contacto del sitio | 3 | correo `@ejemplo.demo` |
-| Exportaciones de reportes (historial con folio) | 5 | generadas por `demo.*` |
+| ERP (operación) | Registrar ventas, compras, lotes, cartera, pedidos, conteos y nómina sin perder datos | `business-logic/` de cada entidad |
+| BI (inteligencia de negocios) | Reportes de ventas, inventario y cartera agregados en SQL, indicadores del Inicio | `business-logic/reports/`, `GET /reports/*` |
+| DSS (apoyo a la decisión) | ¿Conviene financiar con crédito la ampliación? VPN, TIR, B/C, recuperación, tornado y escenarios | `business-logic/financial/simulator.ts` |
 
-Las fechas históricas se ajustan con `UPDATE` después de registrar (la lógica fecha con `now()`); el ancla es el día
-en que se creó `demo.admin`, así que al volver a correrlo otro día no aparecen ventas nuevas. Las listas viven en
-`src/scripts/seed-data.ts` (funciones puras, probadas en `tests/seed.test.ts`) y la ejecución en `src/scripts/seed.ts`.
+### Arquitectura por capas
 
-## Arquitectura
+Cada petición recorre `routes` → `controllers` → `business-logic` → `data-sources` → PostgreSQL, y ninguna capa se
+salta a otra. Así una regla de negocio (FEFO, cupo de crédito, anulación) vive en un solo archivo y la usan por igual la
+app, los reportes y Tita.
+
+### Autenticación sin estado con JWT
+
+Al iniciar sesión el servidor firma un token (HS256) con el usuario, su rol y su versión de token. Cada petición lo
+envía en la cabecera `Authorization`; cerrar sesión sube la versión y deja inválidos los tokens anteriores sin
+guardar sesiones en memoria.
+
+### Tiempo real con Server-Sent Events
+
+El chat, las alarmas y los avisos llegan por `GET /chat/stream`, una conexión HTTP que el servidor mantiene abierta y
+por la que empuja eventos. El aviso no trae datos sensibles: la app los pide por REST. Entre instancias los eventos
+viajan con `LISTEN/NOTIFY` de PostgreSQL.
+
+### Inventario FEFO
+
+*First Expired, First Out*: cada venta descuenta del lote que vence primero y salta los lotes vencidos. Reduce
+pérdidas por vencimiento, que en una agropecuaria (medicina veterinaria, concentrados, semillas) son dinero perdido.
+
+### Evaluación financiera
+
+El simulador proyecta a cinco años la demanda, la cuota de mercado, los costos, la inversión, el crédito (sistema
+francés) y el flujo de caja libre; descuenta los flujos a la tasa mínima exigida para obtener VPN, TIR, relación
+beneficio/costo y período de recuperación, y mide el riesgo con un análisis de sensibilidad (tornado) y escenarios.
+
+---
+
+## Funcionalidades
+
+| Módulo | Qué hace |
+|---|---|
+| Autenticación y usuarios | Inicio y cierre de sesión con JWT, perfil propio, foto de perfil, cambio de contraseña, directorio de personas con presencia |
+| Inventario y lotes | Productos, categorías (líneas públicas), lotes con vencimiento, stock físico y vendible |
+| Ventas | Punto de venta de contado y a crédito con FEFO, precio congelado, factura correlativa y anulación |
+| Clientes y cartera | Cupo de crédito, saldo, abonos y cartera vencida |
+| Proveedores y pedidos | Compras con lote, pedidos a proveedores y de clientes, recepciones parciales y entregas |
+| Conteos de inventario | Programar, contar, enviar y aplicar ajustes por FEFO |
+| Nómina | Liquidación simplificada por periodos (borrador, aprobado, pagado) |
+| Simulador financiero | Mercado, competencia, costos, inversión, financiación, flujo de caja, riesgos y proyectos guardados |
+| Reportes | Ventas, inventario, cartera e informe del proyecto con folio, huella y verificación pública por QR |
+| Comunicación | Chat general y privado con hilos, acuses, fijados, adjuntos y notas de voz; comentarios por registro |
+| Alarmas y avisos | Alarmas personales, avisos de vencimiento, calendario y Web Push |
+| Tita | Consultas y acciones con confirmación, recomendaciones del día, borradores y lectura de facturas |
+| Auditoría | Registro automático de cada escritura, con la marca «IA» cuando la sugirió Tita |
+
+El detalle de cada endpoint está en [API REST](#api-rest).
+
+---
+
+## Roles y Permisos
+
+| Rol (API) | Nombre en la app | Puede |
+|---|---|---|
+| `ADMIN` | Administrador | Todo: los 18 módulos, finanzas, nómina, usuarios, auditoría, anulaciones y ajustes de conteo |
+| `SALES` | Secretaria | Ventas, clientes y cartera, pedidos de clientes, reporte de ventas, inventario en consulta, chat, Tita y alarmas |
+| `WAREHOUSE` | Bodega | Inventario, lotes, proveedores y compras, pedidos a proveedores, conteos, chat, Tita y alarmas |
+
+No hay registro público: el primer administrador se crea con `pnpm create-admin` y él crea las demás cuentas. Cada ruta
+declara sus roles con `authorize(...)`; un rol sin permiso recibe `613` con `requiredRoles`.
+
+---
+
+## Arquitectura y Diseño
 
 API REST en **arquitectura por capas**. Una petición entra por `routes/`, pasa a `business-logic/`
 y esta usa `data-sources/` para hablar con PostgreSQL. Ninguna capa se salta a otra.
@@ -159,71 +227,162 @@ Replica el módulo `categories` (el más pequeño): `models/<entidad>.ts` (tipos
 `routes/<entidad>.ts` con su `authorize(...)` → montar en `routes/index.ts` después de `authenticate` →
 documentar en `docs/openapi.yaml` → migración si cambia el esquema.
 
-## Códigos de error
+---
 
-| Código | Significado | HTTP |
+## Tecnologías
+
+| Componente | Tecnología |
+|---|---|
+| Framework HTTP | Express 5 (Node.js 22, TypeScript) |
+| Base de datos | PostgreSQL 16, cliente `pg` directo (sin ORM) |
+| Autenticación | JWT (HS256) + bcrypt |
+| Validación | A mano, con el validador de `common/validate.ts` en cada DTO de entrada |
+| Esquema de base | Migraciones SQL versionadas en `migrations/` |
+| Documentación | OpenAPI 3.1 servido con Swagger UI en `/docs` |
+| Pruebas | `node:test` |
+| IA | SDK oficial de Anthropic (`@anthropic-ai/sdk`), opcional según `ANTHROPIC_API_KEY` |
+
+---
+
+## Instalación y Ejecución
+
+### Requisitos
+
+| Herramienta | Versión |
+|---|---|
+| Node.js | 22 (ver `.nvmrc`) |
+| pnpm | 10 |
+| PostgreSQL | 16 (o Docker con `docker compose`) |
+
+### Pasos
+
+```bash
+pnpm install
+cp .env.example .env            # ajusta si hace falta
+docker compose up -d db         # PostgreSQL 16 en localhost:5433
+pnpm db:migrate                 # aplica migrations/*.sql
+pnpm create-admin admin 'una-clave-segura'
+pnpm db:seed                    # opcional: datos de ejemplo (ver «Datos de ejemplo»)
+pnpm dev                        # http://localhost:4300/api/v1 · docs en /docs
+```
+
+Comandos:
+
+| Comando | Qué hace |
+|---|---|
+| `pnpm dev` | Servidor con recarga (`tsx watch`) |
+| `pnpm build` / `pnpm start` | Compila a `build/` y ejecuta |
+| `pnpm typecheck` | `tsc --noEmit` |
+| `pnpm test` | Pruebas unitarias (no necesitan base de datos ni clave de IA) |
+| `pnpm db:migrate` / `pnpm db:status` | Aplica o lista migraciones |
+| `pnpm create-admin <usuario> <clave>` | Crea el primer ADMIN (no hay registro público) |
+| `pnpm db:seed` / `pnpm db:seed:prod` | Datos de ejemplo idempotentes (desde `src/` o desde `build/`) |
+| `RESET_DATA_CONFIRM=<marca> pnpm db:reset` / `pnpm db:reset:prod` | Vacía las tablas de negocio y conserva las cuentas; cada marca sirve una sola vez (ver «Reinicio de datos») |
+| `docker compose up --build` | API + base de datos en contenedores |
+
+---
+
+## Variables de Entorno
+
+Ningún valor sensible va en el código ni en la imagen. Ver [.env.example](.env.example).
+
+| Variable | Propósito |
+|---|---|
+| `PORT` | Puerto donde escucha el proceso (4300) |
+| `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD` | Conexión a PostgreSQL en local |
+| `DATABASE_URL` | Cadena única del Postgres gestionado; si está, sustituye a las cinco anteriores |
+| `DB_SSL` | TLS de la conexión: `disable`, `require` o `verify` |
+| `JWT_SECRET` | Firma de los tokens; mínimo 32 caracteres, sin valor por defecto |
+| `JWT_EXPIRES_IN` | Vigencia del token (`8h`) |
+| `ANTHROPIC_API_KEY` | Clave de Claude (Anthropic) para el asistente. Opcional: sin ella las rutas `/ai` responden 660 y la app oculta la IA |
+| `AI_MODEL` / `AI_FAST_MODEL` | Modelo del asistente y de los textos cortos (`claude-sonnet-5-5` / `claude-haiku-5-5`) |
+| `BUSINESS_TZ` | Zona horaria del negocio para "hoy", cortes de reportes y vencimientos (`America/Bogota`) |
+| `CORS_ORIGINS` | Dominios del frontend permitidos, separados por coma |
+| `SEED_ON_START` | Con `true`, la API ejecuta el seed de datos de ejemplo al arrancar (apagado por defecto) |
+| `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` / `VAPID_SUBJECT` | Par Web Push (`pnpm vapid` lo genera) y contacto `mailto:`. Opcionales: sin el par, el push queda apagado (`/push/subscriptions` responde 673) y las alarmas llegan solo por el stream |
+
+---
+
+## Datos de ejemplo
+
+`pnpm db:seed` (brief de octubre de 2026, punto 39) llena la base con una agropecuaria de Sahagún (Córdoba) usando la
+lógica de negocio real (FEFO, stock, cartera, acuses del chat). Es **idempotente**: cada registro se busca por su clave
+natural (usuario, SKU, NIT, documento, nombre del escenario, `clientId` del mensaje, instante de la venta) y si ya
+existe se deja igual; correrlo dos veces no duplica nada ni toca los datos que no son demo. Tarda unos segundos, no
+necesita red ni `ANTHROPIC_API_KEY`, y al final imprime cuántos registros creó u omitió. Con `SEED_ON_START=true` el
+servidor lo ejecuta al arrancar, después de `db.ping()`.
+
+### Reinicio de datos
+
+`RESET_DATA_CONFIRM=<marca> pnpm db:reset` (`db:reset:prod` desde `build/`) deja la base lista para volver a sembrar: vacía
+en una sola transacción (`TRUNCATE … RESTART IDENTITY CASCADE`) todas las tablas de negocio del esquema `public` y conserva
+`users`, `roles`, `schema_migrations` y `data_resets`; si el número de usuarios cambiara, se deshace. Sin la variable no hace
+nada, y cada marca se anota en `data_resets` y **solo sirve una vez**: un arranque repetido con la misma variable no vuelve a
+borrar. Se escribió el 9/11/2026 para sacar de producción el conjunto de prueba de la etapa anterior (colmado) antes de correr
+`pnpm db:seed:prod`; en el servidor se ejecuta una sola vez poniendo la variable y `pnpm db:reset:prod && pnpm db:seed:prod`
+delante de `pnpm start`, y después se quitan ambos.
+
+Qué crea y cómo se reconoce (sin columnas nuevas):
+
+| Datos | Cantidad | Marca |
 |---|---|---|
-| 400 | Datos de entrada mal formados (trae `details`) | 400 |
-| 404 | Ruta inexistente | 404 |
-| 500 | Error interno | 500 |
-| 601 | Producto no encontrado | 404 |
-| 602 | Categoría no encontrada | 404 |
-| 603 | Usuario no encontrado | 404 |
-| 604 | Cliente no encontrado | 404 |
-| 605 | Proveedor no encontrado | 404 |
-| 606 | Venta no encontrada | 404 |
-| 607 | Escenario financiero no encontrado | 404 |
-| 608 | Contacto del sitio no encontrado | 404 |
-| 609 | Mensaje o adjunto del chat no encontrado (o de un privado ajeno: no se revela que exista) | 404 |
-| 610 | Credenciales inválidas | 401 |
-| 611 | Token ausente o inválido | 401 |
-| 612 | Usuario inactivo | 401 |
-| 613 | Rol insuficiente (trae `requiredRoles`) | 403 |
-| 620 | Stock insuficiente | 409 |
-| 621 | Cupo de crédito excedido | 409 |
-| 622 | La venta ya estaba anulada | 409 |
-| 623 | Abono mayor al saldo de cartera | 409 |
-| 625 | Producto inactivo | 409 |
-| 626 | Cliente inactivo | 409 |
-| 630 | Recurso duplicado (unique) | 409 |
-| 631 | Categoría con productos asociados | 409 |
-| 640 | Demasiados intentos de acceso | 429 |
-| 650 | Escenario financiero inválido | 422 |
-| 660 | IA no configurada (falta `ANTHROPIC_API_KEY`) | 503 |
-| 661 | El proveedor de IA falló o no respondió | 502 |
-| 662 | La tarea de Tita no existe, venció (10 min) o es de otra persona | 404 |
-| 663 | La conversación de Tita no existe o es de otra persona | 404 |
-| 670 | La alarma no existe o es de otra persona | 404 |
-| 671 | Programación de alarma sin disparo futuro (una sola vez con fecha y hora ya pasadas) | 422 |
-| 672 | Tope de 50 alarmas por persona alcanzado | 409 |
-| 673 | Web Push no configurado (falta el par VAPID) | 503 |
-| 674 | La suscripción push no existe o es de otra persona | 404 |
-| 680 | El documento (folio del QR) no existe | 404 |
-| 685 | El comentario no existe (o ya se eliminó) | 404 |
-| 686 | El comentario al que se responde es de otro registro o se eliminó | 409 |
-| 687 | Solo el autor o la administración puede eliminar el comentario | 403 |
-| 688 | El registro que se quiere comentar no existe | 404 |
-| 690 | El ítem de la biblioteca no existe o el rol no puede verlo | 404 |
-| 691 | La persona no tiene foto de perfil | 404 |
-| 700 | El pedido no existe | 404 |
-| 701 | El pedido no está pendiente (se recibió en parte, se cerró o se canceló): no se edita | 409 |
-| 702 | La recepción supera lo que falta por recibir en una línea (trae `lineId`, `pending`, `requested`) | 409 |
-| 703 | El pedido ya está cerrado (recibido, entregado o cancelado): no se recibe, entrega ni cancela | 409 |
-| 704 | La venta indicada al entregar no es del cliente del encargo o está anulada | 409 |
-| 705 | El empleado de nómina no existe | 404 |
-| 706 | El periodo de nómina (o la línea dentro de él) no existe | 404 |
-| 707 | El periodo de nómina no admite ese cambio: solo un borrador se edita, aprueba o elimina, y solo uno aprobado se marca pagado | 409 |
-| 708 | Ya existe un periodo de nómina de esa frecuencia con la misma fecha de inicio | 409 |
-| 709 | No hay empleados activos con esa frecuencia de pago para crear el periodo | 422 |
-| 710 | El conteo de inventario no existe | 404 |
-| 711 | El conteo no está en un estado que permita esa acción (trae `status`, `action`, `allowedFrom`) | 409 |
-| 712 | Faltan líneas por contar para enviar el conteo (trae `pending` y `productIds`) | 422 |
-| 713 | Falta (o es anterior a hoy) la fecha de vencimiento del lote de ajuste de un sobrante (trae `[{ path: "expiresAt.<productId>", productId, message }]`) | 400 |
-| 714 | Un faltante del conteo es mayor que las unidades en lotes del producto (trae `requested`, `available`) | 409 |
-| 715 | Proyecto del simulador no encontrado (trae `missing` en la comparación) | 404 |
-| 716 | Solo el dueño del proyecto del simulador puede guardarlo encima o eliminarlo | 403 |
+| Usuarios `demo.admin` (ADMIN), `demo.caja` (SALES), `demo.bodega` (WAREHOUSE) | 3 | usuario `demo.*`; clave de los tres: `Demo-2026` |
+| Líneas de la página pública (Alimentos balanceados, Medicina veterinaria, Semillas y fertilizantes, Aves de corral, Productos agroquímicos, Ferretería agrícola) con descripción y subfamilias | 6 | por `code` 01…06, o por nombre si la base es anterior a la migración 0018 (entonces se les completa el código) |
+| Productos con precios de compra y venta | 56 | SKU `DEMO-XXX-NNN` |
+| Proveedores | 5 | NIT `DEMO-…` |
+| Lotes: lejanos (cubren las ventas), por vencer en 3, 10 y 25 días y ya vencidos | ~78 | producto `DEMO-…` |
+| Clientes con cupo: al día, con cartera vencida, con cupo agotado y solo de contado | 28 | documento `DEMO-…` |
+| Ventas de contado y a crédito de los últimos 120 días, con anulaciones y abonos | ~180 ventas, ~6 anuladas, ~50 abonos | registradas por `demo.*` |
+| Escenarios financieros | 3 | nombre `[Demo] …` |
+| Chat del equipo: canal general con hilo, cita y fijado; privados; adjuntos reales (PNG, PDF y CSV generados por el script y guardados en `chat_attachments`) | 34 mensajes, 3 adjuntos | autor `demo.*` |
+| Mensajes de contacto del sitio | 3 | correo `@ejemplo.demo` |
+| Exportaciones de reportes (historial con folio) | 5 | generadas por `demo.*` |
 
-## Estado de la API
+Las fechas históricas se ajustan con `UPDATE` después de registrar (la lógica fecha con `now()`); el ancla es el día
+en que se creó `demo.admin`, así que al volver a correrlo otro día no aparecen ventas nuevas. Las listas viven en
+`src/scripts/seed-data.ts` (funciones puras, probadas en `tests/seed.test.ts`) y la ejecución en `src/scripts/seed.ts`.
+
+---
+
+## Base de Datos
+
+PostgreSQL 16 con **39 tablas de negocio** creadas por las migraciones `0001` a `0018` de [migrations/](migrations)
+(más `schema_migrations`, que lleva el control de las aplicadas, y `data_resets`, que anota los reinicios de datos).
+
+| Grupo | Tablas |
+|---|---|
+| Usuarios y catálogo | `roles`, `users`, `categories`, `products`, `suppliers`, `product_batches` |
+| Ventas y cartera | `customers`, `sales`, `sale_lines`, `sale_line_batch_allocations`, `customer_payments`, `invoice_counters` |
+| Pedidos y conteos | `orders`, `order_lines`, `stock_counts`, `stock_count_lines`, `stock_count_adjustments` |
+| Chat interno | `chat_messages`, `chat_receipts`, `chat_mentions`, `chat_attachments` |
+| Tita | `ai_conversations`, `ai_messages` |
+| Alarmas y avisos | `alarms`, `alarm_fires`, `due_notices`, `push_subscriptions` |
+| Nómina | `payroll_employees`, `payroll_periods`, `payroll_lines` |
+| Simulador financiero | `financial_projects`, `financial_scenarios`, `financial_scenario_cash_flows`, `financial_scenario_amortization` |
+| Auditoría, reportes y otros | `audits`, `record_comments`, `report_exports`, `library_items`, `contact_messages` |
+
+### Reglas de integridad
+
+- El esquema solo cambia por migraciones numeradas; una migración aplicada no se edita.
+- Dinero del negocio en `DECIMAL(12,2)`; el módulo financiero usa `DOUBLE PRECISION`.
+- `products.stock` y `customers.balance` se mueven en la misma transacción que la operación que los cambia, con
+  `SELECT ... FOR UPDATE` sobre la fila.
+- `snake_case` en la base y `camelCase` en el JSON de la API.
+
+### Comandos útiles
+
+```bash
+pnpm db:migrate      # aplica las migraciones pendientes
+pnpm db:status       # lista las aplicadas y las pendientes
+pnpm db:seed         # datos de ejemplo (idempotente)
+```
+
+---
+
+## API REST
+
+Prefijo: `/api/v1`. Todas las rutas, salvo `POST /auth/signin` y las públicas indicadas, exigen
+`Authorization: Bearer <token>`. Contrato completo en [docs/openapi.yaml](docs/openapi.yaml) y en `/docs`.
 
 Los 44 endpoints del documento 06 están implementados y documentados en `/docs`. Las migraciones
 `0002_figma_v4` y `0003_chat_privado_presencia` agregan 9 más que pide el prototipo de escritorio v4.2 (Mi perfil,
@@ -259,7 +418,24 @@ agrega 5 (respuesta en dos pasos e historial de Tita) y `0008_alarmas_avisos_pus
 | Nómina | `GET/POST /payroll/employees` (`?active=&frequency=MONTHLY\|BIWEEKLY`; nombre, apellido, `documentId` único —630 si se repite—, cargo, `baseSalary` mensual, `payFrequency`, `userId` opcional), `PUT /payroll/employees/:id` (incluye `active` para activar o desactivar), `GET /payroll/periods?status=DRAFT\|APPROVED\|PAID&year=`, `POST /payroll/periods` (`{ frequency, periodStart, periodEnd, payDate }`; crea el borrador con una línea por empleado activo de esa frecuencia y el salario prorrateado: quincenal = mitad del mensual; 708 duplicado, 709 sin empleados), `GET /payroll/periods/:id` (líneas y totales; `editable` solo en borrador), `PUT /payroll/periods/:id/lines/:lineId` (`overtime`, `bonuses`, `transport`, `otherDeductions`; recalcula en el servidor; solo borrador), `POST /payroll/periods/:id/approve`, `POST /payroll/periods/:id/pay` (quién y cuándo), `DELETE /payroll/periods/:id` (solo borrador). Todo solo ADMIN (Secretaria y Bodega: 613). `listUpcomingPayroll(untilDate)` (`business-logic/payroll/list-upcoming-payroll.ts`) da los periodos sin pagar con fecha de pago hasta esa fecha para el calendario y los avisos. **Liquidación simplificada** (`business-logic/payroll/liquidate.ts`): devengado = salario base del periodo + horas extra/recargos + bonificaciones + auxilio de transporte (valores que escribe la persona; el auxilio, del decreto vigente, por defecto 0); deducciones = salud 4 % + pensión 4 % sobre salario base + horas extra, + otros descuentos; neto = devengado − deducciones; pesos enteros. **No es la nómina electrónica de la DIAN** ni calcula prestaciones sociales, aportes del empleador, Fondo de Solidaridad Pensional ni retención en la fuente (pendiente). No estaba en el documento 06: lo pidió el negocio en la Fase A (migración `0015_nomina`) | Fase A, octubre de 2026 |
 | Conteos de inventario | `GET /stock-counts?status=&from=&to=&page&limit` (fecha programada inclusive; cada fila trae `totalLines`, `countedLines` y `due`: `OVERDUE`/`TODAY`/`UPCOMING` mientras esté PLANNED o IN_PROGRESS, si no `null`), `POST /stock-counts` (`title`, `scheduledDate` de hoy en adelante, `scope` ALL\|CATEGORY, `categoryId` si es CATEGORY, `note`), `GET /stock-counts/:id` (líneas con producto, SKU, `expectedQuantity`, `countedQuantity`, `difference`, `appliedDifference`, `note` y `summary`), `PUT /stock-counts/:id` (título, fecha y nota; solo PLANNED), `POST /stock-counts/:id/start` (PLANNED → IN_PROGRESS: una línea por producto activo del alcance con la foto de `products.stock`), `PUT /stock-counts/:id/lines` (`[{ productId, countedQuantity \| null, note? }]`; se guarda a medias; solo IN_PROGRESS), `POST /stock-counts/:id/submit` (→ SUBMITTED; 712 si queda alguna sin contar), `GET /stock-counts/:id/preview-adjustment` (solo SUBMITTED: diferencia = contado − stock físico **actual**, con los lotes que bajaría cada faltante —vencidos primero, luego el que vence antes— y el costo del lote de cada sobrante), `POST /stock-counts/:id/apply` (**solo ADMIN**; `{ surplusLots: [{ productId, expiresAt }] }`; en una transacción con conteo, productos y lotes bloqueados: los faltantes bajan `quantity_remaining` por FEFO y `products.stock`; los sobrantes crean un lote con `registerBatch` al último costo conocido —o el precio de compra vigente—; cada movimiento queda en `stock_count_adjustments`; responde el conteo con `adjustments`), `POST /stock-counts/:id/cancel` (PLANNED o IN_PROGRESS). Todo lo demás ADMIN y WAREHOUSE; SALES recibe 613. `listScheduledCounts(untilDate, { fromDate? })` en `business-logic/stock-counts/list-scheduled-counts.ts` da los pendientes para el calendario y los avisos. Migración `0016_conteos_inventario`. No estaba en el documento 06 | extensión |
 
-### Reglas de negocio implementadas
+### Ejemplo con curl
+
+```bash
+# 1. Iniciar sesión y guardar el token
+TOKEN=$(curl -s -X POST http://localhost:4300/api/v1/auth/signin \
+  -H "Content-Type: application/json" \
+  -d '{"username":"demo.admin","password":"<clave>"}' | jq -r .token)
+
+# 2. Productos con stock vendible
+curl -s http://localhost:4300/api/v1/products?limit=5 -H "Authorization: Bearer $TOKEN"
+
+# 3. Cálculo del simulador con el ejemplo de la ampliación
+curl -s http://localhost:4300/api/v1/financial/simulator/defaults -H "Authorization: Bearer $TOKEN"
+```
+
+---
+
+## Reglas de Negocio
 
 - **Hora del negocio.** "Hoy", los cortes de reportes y los vencimientos se cuentan en `BUSINESS_TZ`
   (America/Bogota); cada sesión de PostgreSQL abre en esa zona, así una venta de las 8 p. m. es del mismo día.
@@ -328,6 +504,126 @@ agrega 5 (respuesta en dos pasos e historial de Tita) y `0008_alarmas_avisos_pus
   `DECISIONES-FASE-B.md`; pruebas en `tests/financial-simulator.test.ts`.
 - **Reportes (RF-08.4).** Todos se agregan en SQL; nunca se traen listas completas a memoria.
 
+---
+
+## Códigos de error
+
+| Código | Significado | HTTP |
+|---|---|---|
+| 400 | Datos de entrada mal formados (trae `details`) | 400 |
+| 404 | Ruta inexistente | 404 |
+| 500 | Error interno | 500 |
+| 601 | Producto no encontrado | 404 |
+| 602 | Categoría no encontrada | 404 |
+| 603 | Usuario no encontrado | 404 |
+| 604 | Cliente no encontrado | 404 |
+| 605 | Proveedor no encontrado | 404 |
+| 606 | Venta no encontrada | 404 |
+| 607 | Escenario financiero no encontrado | 404 |
+| 608 | Contacto del sitio no encontrado | 404 |
+| 609 | Mensaje o adjunto del chat no encontrado (o de un privado ajeno: no se revela que exista) | 404 |
+| 610 | Credenciales inválidas | 401 |
+| 611 | Token ausente o inválido | 401 |
+| 612 | Usuario inactivo | 401 |
+| 613 | Rol insuficiente (trae `requiredRoles`) | 403 |
+| 620 | Stock insuficiente | 409 |
+| 621 | Cupo de crédito excedido | 409 |
+| 622 | La venta ya estaba anulada | 409 |
+| 623 | Abono mayor al saldo de cartera | 409 |
+| 625 | Producto inactivo | 409 |
+| 626 | Cliente inactivo | 409 |
+| 630 | Recurso duplicado (unique) | 409 |
+| 631 | Categoría con productos asociados | 409 |
+| 640 | Demasiados intentos de acceso | 429 |
+| 650 | Escenario financiero inválido | 422 |
+| 660 | IA no configurada (falta `ANTHROPIC_API_KEY`) | 503 |
+| 661 | El proveedor de IA falló o no respondió | 502 |
+| 662 | La tarea de Tita no existe, venció (10 min) o es de otra persona | 404 |
+| 663 | La conversación de Tita no existe o es de otra persona | 404 |
+| 670 | La alarma no existe o es de otra persona | 404 |
+| 671 | Programación de alarma sin disparo futuro (una sola vez con fecha y hora ya pasadas) | 422 |
+| 672 | Tope de 50 alarmas por persona alcanzado | 409 |
+| 673 | Web Push no configurado (falta el par VAPID) | 503 |
+| 674 | La suscripción push no existe o es de otra persona | 404 |
+| 680 | El documento (folio del QR) no existe | 404 |
+| 685 | El comentario no existe (o ya se eliminó) | 404 |
+| 686 | El comentario al que se responde es de otro registro o se eliminó | 409 |
+| 687 | Solo el autor o la administración puede eliminar el comentario | 403 |
+| 688 | El registro que se quiere comentar no existe | 404 |
+| 690 | El ítem de la biblioteca no existe o el rol no puede verlo | 404 |
+| 691 | La persona no tiene foto de perfil | 404 |
+| 700 | El pedido no existe | 404 |
+| 701 | El pedido no está pendiente (se recibió en parte, se cerró o se canceló): no se edita | 409 |
+| 702 | La recepción supera lo que falta por recibir en una línea (trae `lineId`, `pending`, `requested`) | 409 |
+| 703 | El pedido ya está cerrado (recibido, entregado o cancelado): no se recibe, entrega ni cancela | 409 |
+| 704 | La venta indicada al entregar no es del cliente del encargo o está anulada | 409 |
+| 705 | El empleado de nómina no existe | 404 |
+| 706 | El periodo de nómina (o la línea dentro de él) no existe | 404 |
+| 707 | El periodo de nómina no admite ese cambio: solo un borrador se edita, aprueba o elimina, y solo uno aprobado se marca pagado | 409 |
+| 708 | Ya existe un periodo de nómina de esa frecuencia con la misma fecha de inicio | 409 |
+| 709 | No hay empleados activos con esa frecuencia de pago para crear el periodo | 422 |
+| 710 | El conteo de inventario no existe | 404 |
+| 711 | El conteo no está en un estado que permita esa acción (trae `status`, `action`, `allowedFrom`) | 409 |
+| 712 | Faltan líneas por contar para enviar el conteo (trae `pending` y `productIds`) | 422 |
+| 713 | Falta (o es anterior a hoy) la fecha de vencimiento del lote de ajuste de un sobrante (trae `[{ path: "expiresAt.<productId>", productId, message }]`) | 400 |
+| 714 | Un faltante del conteo es mayor que las unidades en lotes del producto (trae `requested`, `available`) | 409 |
+| 715 | Proyecto del simulador no encontrado (trae `missing` en la comparación) | 404 |
+| 716 | Solo el dueño del proyecto del simulador puede guardarlo encima o eliminarlo | 403 |
+
+---
+
+## Seguridad
+
+| Medida | Cómo se aplica |
+|---|---|
+| Contraseñas | bcrypt; nunca salen en una respuesta ni en la auditoría |
+| Tokens | JWT HS256 con `JWT_SECRET` de al menos 32 caracteres y versión de token para invalidar sesiones |
+| Autorización | Toda ruta nace protegida y declara sus roles; la identidad sale del token, nunca del cuerpo |
+| Cabeceras | `helmet` y CORS limitado a `CORS_ORIGINS` |
+| Límites de uso | Inicio de sesión (`640`), formulario de contacto (5 por hora), verificación de folios (30 por minuto) y Tita (40 consultas cada 5 minutos) |
+| Errores | Un solo manejador responde `{ message: "<código>" }`; nunca un stack trace |
+| Auditoría | Cada escritura exitosa queda registrada con usuario, método, recurso, cambios y la marca `ai_suggested` |
+| IA | Tita no escribe: devuelve la petición exacta y la persona confirma; imágenes y documentos se tratan como datos |
+
+---
+
+## Pruebas
+
+```bash
+pnpm test        # node:test; no necesita base de datos ni clave de IA
+pnpm typecheck   # tsc --noEmit
+```
+
+Las pruebas viven en [tests/](tests) (un archivo por módulo: validación, errores, paginación, token, motor y simulador
+financiero, chat, alarmas, pedidos, nómina, conteos, reportes, búsqueda, comentarios, biblioteca, datos de ejemplo,
+entre otros). El simulador se prueba contra el ejemplo de la ampliación del local (VPN de unos $19,8 M al 18 %) y su tornado.
+
+---
+
+## Despliegue
+
+El backend se empaqueta como imagen de contenedor ([Dockerfile](Dockerfile)); CI
+([.github/workflows/ci.yml](.github/workflows/ci.yml)) hace typecheck, pruebas, migraciones contra un
+PostgreSQL efímero, build y construye la imagen. En producción la API corre detrás de un proxy HTTPS
+y la base es un servicio gestionado aparte con respaldos automáticos; la API no guarda estado entre
+peticiones, así que puede reiniciarse sin pérdida.
+
+---
+
+## Solución de Problemas
+
+| Síntoma | Causa probable | Solución |
+|---|---|---|
+| `ECONNREFUSED 127.0.0.1:5433` al arrancar | La base no está corriendo | `docker compose up -d db` o revisa `DB_HOST`/`DB_PORT` |
+| La API no arranca y pide `JWT_SECRET` | Falta la variable o es corta | Define un `JWT_SECRET` de 32 caracteres o más en `.env` |
+| `relation … does not exist` | Base sin migrar | `pnpm db:migrate` |
+| La app responde `611` en todo | Token vencido o de otra instancia | Vuelve a iniciar sesión |
+| Las rutas `/ai` responden `660` | Falta `ANTHROPIC_API_KEY` | Configúrala; sin ella la app oculta a Tita |
+| `/push/subscriptions` responde `673` | Falta el par VAPID | `pnpm vapid` y define `VAPID_*` |
+| CORS bloquea la app | El dominio no está en `CORS_ORIGINS` | Agrega el dominio del frontend separado por comas |
+
+---
+
 ## Decisiones pendientes con el negocio
 
 - Política exacta de anulación de una venta (RF-03.4): plazo y si queda registro o se borra.
@@ -342,17 +638,45 @@ agrega 5 (respuesta en dos pasos e historial de Tita) y `0008_alarmas_avisos_pus
   el Fondo de Solidaridad Pensional y la retención en la fuente; y decidir si alguna bonificación es salarial (hoy no cotiza).
   Ningún valor legal anual (salario mínimo, auxilio de transporte) está en el código: el auxilio se escribe por línea.
 
-## Producción
+---
 
-El backend se empaqueta como imagen de contenedor ([Dockerfile](Dockerfile)); CI
-([.github/workflows/ci.yml](.github/workflows/ci.yml)) hace typecheck, pruebas, migraciones contra un
-PostgreSQL efímero, build y construye la imagen. En producción la API corre detrás de un proxy HTTPS
-y la base es un servicio gestionado aparte con respaldos automáticos; la API no guarda estado entre
-peticiones, así que puede reiniciarse sin pérdida.
+## Fases del Desarrollo
 
-## Registro de cambios
+| Fase | Alcance | Estado |
+|---|---|---|
+| Documentación técnica | Arquitectura, requisitos, casos de uso, modelo de datos, diseño de la API e infraestructura | Completado |
+| Núcleo ERP | Usuarios y roles, inventario con lotes y FEFO, ventas, clientes y cartera, proveedores, auditoría y reportes | Completado |
+| Comunicación y Tita | Chat con acuses, hilos y adjuntos; contactos; Tita con acciones confirmadas; alarmas y Web Push | Completado |
+| Fase A | Pedidos, conteos de inventario, nómina simplificada, biblioteca, calendario, comentarios e historial | Completado |
+| Fase B | Simulador financiero por unidades, proyectos guardados e informe del proyecto | Completado |
+| Cierre | Líneas públicas de categorías, reinicio de datos para producción y documentación | Completado |
 
-Ver [CHANGELOG.md](CHANGELOG.md).
+El detalle de cada cambio está en [CHANGELOG.md](CHANGELOG.md).
+
+---
+
+## Autores
+
+| Nombre | Programa | Trabajo |
+|---|---|---|
+| Karina Redondo Sáez | Ingeniería de Software | Sistemas de Información Gerencial · Ingeniería Económica |
+| Alexa Patricia Ricardo Lozano | Ingeniería de Software | Sistemas de Información Gerencial · Ingeniería Económica |
+| Edgar Alexander Matos Rivera | Ingeniería de Software | Ingeniería Económica |
+
+Universidad de Cartagena · Facultad de Ingeniería · CT Cereté
+Sistemas de Información Gerencial (AL17705) · Docente: Esp. Luis Antonio Sarruf Durango
+Ingeniería Económica (FC17701) · Docente: Esp. Estrella del Carmen Camacho Alvis
+
+---
+
+## Notas Académicas
+
+- Proyecto desarrollado con fines académicos como Trabajo Colaborativo Contextualizado del semestre 2026-2.
+- Los usuarios, clientes, ventas y cifras de demostración son ficticios; las cifras financieras son de ejemplo con
+  supuestos académicos que la gerencia debe confirmar.
+- La facturación electrónica de la DIAN y la nómina electrónica quedan fuera del alcance.
+
+---
 
 ## Licencias
 
