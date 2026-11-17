@@ -4,7 +4,22 @@
 Es idempotente: correrlo dos veces no duplica nada. El detalle de lo que crea está en la sección
 [Datos de ejemplo](../README.md#datos-de-ejemplo) del README, junto con la clave de las cuentas demo.
 
-## Cuentas por rol
+## Cuentas de la demostración publicada
+
+Para entrar a la demostración en [mi-tierrita-app-keoc.vercel.app](https://mi-tierrita-app-keoc.vercel.app) (y a los
+enlaces y códigos QR de los reportes del documento) se usan estas cuentas, una por rol:
+
+| Rol | Usuario | Contraseña |
+|---|---|---|
+| Administrador | `admin` | `vgOMpwhSJzEFxETI` |
+| Secretaria (ventas) | `ventas` | `Ku_vZ3QBm7gqrRge` |
+| Bodega | `almacen` | `KbBVHzrk37pX3GmS` |
+
+Son cuentas de demostración con datos ficticios; no corresponden a personas ni a ventas reales de la tienda.
+
+## Cuentas por rol en una instalación local
+
+Estas las crea `pnpm db:seed` en una base propia; **no** sirven en la demostración publicada.
 
 | Usuario | Rol | Nombre en la demo | Qué probar |
 |---|---|---|---|
